@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<faces-config
+    xmlns="http://java.sun.com/xml/ns/javaee"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://java.sun.com/xml/ns/javaee 
+                        http://java.sun.com/xml/ns/javaee/web-facesconfig_1_2.xsd"
+    version="1.2">
+
+    <!-- ============================================================ -->
+    <!-- 1️⃣  MANAGED BEANS -->
+    <!-- ============================================================ -->
+
+
+     <managed-bean>
+        <managed-bean-name>selfServiceSettingsBBean</managed-bean-name>
+        <managed-bean-class>com.search.SelfServiceSettingsBBean</managed-bean-class>
+        <managed-bean-scope>session</managed-bean-scope>
+    </managed-bean>
+
+    <!-- You can define multiple beans like this:
+    <managed-bean>
+        <managed-bean-name>userBean</managed-bean-name>
+        <managed-bean-class>com.example.bean.UserBean</managed-bean-class>
+        <managed-bean-scope>request</managed-bean-scope>
+    </managed-bean>
+    -->
+
+    <!-- ============================================================ -->
+    <!-- 2️⃣  NAVIGATION RULES (Optional) -->
+    <!-- ============================================================ -->
+
+    <!-- Example navigation:
+    <navigation-rule>
+        <from-view-id>/index.xhtml</from-view-id>
+        <navigation-case>
+            <from-outcome>success</from-outcome>
+            <to-view-id>/welcome.xhtml</to-view-id>
+        </navigation-case>
+    </navigation-rule>
+    -->
+
+    <!-- ============================================================ -->
+    <!-- 3️⃣  APPLICATION CONFIGURATION -->
+    <!-- ============================================================ -->
+
+    <application>
+        <!-- Use Facelets as the default view technology -->
+        <view-handler>com.sun.facelets.FaceletViewHandler</view-handler>
+
+        <!-- Optional: set default render kit -->
+        <default-render-kit-id>HTML_BASIC</default-render-kit-id>
+
+        <!-- Optional: message bundle -->
+        <!-- <message-bundle>com.example.messages</message-bundle> -->
+    </application>
+
+</faces-config>

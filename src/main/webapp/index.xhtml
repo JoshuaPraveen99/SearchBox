@@ -1,0 +1,277 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<ui:composition template="/WEB-INF/templates/main.xhtml"
+    xmlns="http://www.w3.org/1999/xhtml"
+    xmlns:ui="http://java.sun.com/jsf/facelets"
+    xmlns:h="http://java.sun.com/jsf/html"
+    xmlns:f="http://java.sun.com/jsf/core"
+    xmlns:a4j="http://richfaces.org/a4j"
+    xmlns:rich="http://richfaces.org/rich">
+
+    <ui:define name="title">Search Box Example</ui:define>
+
+    <ui:define name="head">
+		<style type="text/css">
+.form-section {
+	margin: 20px;
+	font-family: Arial, sans-serif;
+}
+
+.field-row {
+	display: flex;
+	align-items: flex-start;
+	gap: 20px; /* space between dropdowns */
+}
+
+/* Label on the left side of the first dropdown row only */
+.field-label {
+	width: 100px;
+	font-weight: bold;
+	font-size: 12px;
+	line-height: 24px;
+}
+
+.field-col {
+	position: relative; /* Anchor dropdown positioning */
+}
+
+/* ========= EVENTPICKUP DROPDOWNS ========= */
+.rich-dropdown {
+	position: relative;
+	width: 220px; /* constant width */
+	max-width: 220px;
+	font-size: 11px;
+	flex-shrink: 0;
+}
+
+.rich-dropdown-label {
+	border: 1px solid #ccc;
+	background: #fff;
+	border-radius: 3px;
+	padding: 5px 8px;
+	cursor: pointer;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	box-sizing: border-box;
+	min-height: 26px; /* base height */
+	overflow-y: auto; /* grow vertically */
+	max-height: 120px; /* limit height expansion */
+}
+
+/* Display long text on new line */
+.label-text {
+	white-space: normal;
+	word-wrap: break-word;
+	overflow-y: auto;
+	overflow-x: hidden;
+	flex: 1;
+}
+
+/* Dropdown list popup */
+.dropdown-list {
+	display: none;
+	position: absolute;
+	top: 100%;
+	left: 0;
+	background: #fff;
+	border: 1px solid #ccc;
+	z-index: 999;
+	width: 100%;
+	max-height: 180px;
+	overflow-y: auto;
+	border-radius: 3px;
+	padding: 4px 0;
+	white-space: nowrap;
+}
+
+.rich-dropdown.open .dropdown-list {
+	display: block;
+}
+
+.dropdown-list label {
+	display: block;
+	padding: 4px 8px;
+	cursor: pointer;
+}
+
+.dropdown-list label:hover {
+	background-color: #f5f5f5;
+}
+
+.dropdown-list input[type="checkbox"] {
+	margin-right: 6px;
+	vertical-align: middle;
+}
+
+/* ========= ✅ FIXED NOTIFICATION SUGGESTIONBOX ========= */
+
+/* Style the floating popup list (the brown box) */
+[id$="notificationSuggestion:list"] {
+  position: absolute !important;
+  left: 0 !important;
+  width: 240px !important;
+  max-height: 200px !important;
+  overflow-y: auto !important;
+  z-index: 99999 !important;
+  box-shadow: 0 2px 6px rgba(0,0,0,.2);
+}
+
+/* Row styling inside the popup */
+[id$="notificationSuggestion:list"] label {
+  display: flex;
+  align-items: center;
+  padding: 5px 6px;
+  cursor: pointer;
+}
+[id$="notificationSuggestion:list"] label:hover {
+  background: #eee;
+}
+
+/* 🔒 Hide ONLY the inline/internal list that RichFaces renders near the input.
+   Do NOT touch the popup container whose id ends with :list */
+[/* HIDE ONLY the inline list that RichFaces injects as a sibling of the input */
+[id$="notificationInput"] ~ .rich-sb-list-box,
+[id$="notificationInput"] ~ .rich-sb-list-scroller,
+[id$="notificationInput"] ~ .rich-sb-content,
+[id$="notificationInput"] ~ table.rich-sb-table,
+[id$="notificationInput"] ~ .rich-sb-int-sel,
+[id$="notificationInput"] ~ .rich-sb-ext-sel {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
+</style>
+
+		<script type="text/javascript" src="#{facesContext.externalContext.requestContextPath}/resources/js/dropdown.js"></script>
+
+        
+    </ui:define>
+
+   <ui:define name="content">
+        <h:form id="formId">
+            <div class="form-section">
+
+                <!-- ===================== FIRST ROW: 3 DROPDOWNS SIDE BY SIDE ===================== -->
+				<div class="field-row">
+					<!-- Event Codes Dropdown -->
+					<span class="field-label">Event Codes:</span>
+					<div class="rich-dropdown">
+						<div class="rich-dropdown-label">
+							<span class="label-text" data-default="Select Event Codes">Select
+								Event Codes</span> <span>▼</span>
+						</div>
+						<div class="dropdown-list">
+							<div class="dropdown-actions">
+								<button type="button" onclick="selectAll(this, true)">Select
+									All</button>
+								<button type="button" onclick="selectAll(this, false)">Clear
+									All</button>
+							</div>
+
+							<ui:repeat value="#{selfServiceSettingsBBean.eventCodesList}"
+								var="code">
+								<label title="#{selfServiceSettingsBBean.eventCodeTooltips[code]}">
+								<h:selectBooleanCheckbox
+										value="#{selfServiceSettingsBBean.selectedEventCodesMap[code]}"
+										onclick="this.dataset.label='#{code}'">
+										<a4j:support event="onclick"
+											actionListener="#{selfServiceSettingsBBean.updateSelection}"
+											ajaxSingle="true" reRender="@none">
+											<f:attribute name="type" value="event" />
+											<f:attribute name="label" value="#{code}" />
+										</a4j:support>
+									</h:selectBooleanCheckbox>
+									<h:outputText value="#{code}" style="margin-left:5px;" />
+								</label>
+							</ui:repeat>
+						</div>
+					</div>
+
+					<!-- Pickup Type Dropdown -->
+					<span class="field-label">Pickup Type:</span>
+					<div class="rich-dropdown">
+						<div class="rich-dropdown-label">
+							<span class="label-text" data-default="Select Pickup Type">Select
+								Pickup Type</span> <span>▼</span>
+						</div>
+						<div class="dropdown-list">
+							<div class="dropdown-actions">
+								<button type="button" onclick="selectAll(this, true)">Select
+									All</button>
+								<button type="button" onclick="selectAll(this, false)">Clear
+									All</button>
+							</div>
+
+							<ui:repeat value="#{selfServiceSettingsBBean.pickupTypeList}"
+								var="type">
+								<label> <h:selectBooleanCheckbox
+										value="#{selfServiceSettingsBBean.selectedPickupTypeMap[type]}"
+										onclick="this.dataset.label='#{type}'">
+										<a4j:support event="onclick"
+											actionListener="#{selfServiceSettingsBBean.updateSelection}"
+											ajaxSingle="true" reRender="@none">
+											<f:attribute name="type" value="pickup" />
+											<f:attribute name="label" value="#{type}" />
+										</a4j:support>
+									</h:selectBooleanCheckbox> <h:outputText value="#{type}" style="margin-left:5px;" />
+								</label>
+							</ui:repeat>
+						</div>
+					</div>
+	
+				<!-- Notification Messages (RichFaces 3 suggestionbox) -->
+					<!-- Notification Messages Label -->
+					<div class="field-label">Notification Messages:</div>
+
+					<div class="field-col">
+						<h:inputTextarea id="notificationInput"
+							value="#{selfServiceSettingsBBean.selectedNotificationTexts}"
+							oninput="autoGrow(this);" />
+					</div>
+
+					<!-- ✅ Popup completely OUTSIDE field-col -->
+					<rich:suggestionbox id="notificationSuggestion"
+						for="notificationInput"
+						suggestionAction="#{selfServiceSettingsBBean.filterNotificationMessages}"
+						var="msg" fetchValue="#{msg}" minChars="1" width="240"
+						height="200" directInputSuggestions="true"
+						usingSuggestObjects="false" nothingLabel="" shadowOpacity="0">
+
+						<h:column>
+							<label
+								style="display: flex; align-items: center; cursor: pointer;">
+								<h:selectBooleanCheckbox
+									value="#{selfServiceSettingsBBean.selectedNotificationMap[msg]}">
+
+									<f:attribute name="type" value="notification" />
+									<f:attribute name="label" value="#{msg}" />
+
+									<a4j:support event="onclick"
+										actionListener="#{selfServiceSettingsBBean.updateSelection}"
+										ajaxSingle="true"
+										reRender="notificationInput,notificationSuggestion" />
+								</h:selectBooleanCheckbox> <h:outputText value="#{msg}" style="margin-left:6px;" />
+							</label>
+						</h:column>
+
+					</rich:suggestionbox>
+				</div>
+				<!-- ===================== BUTTON AND OUTPUT ===================== -->
+                <div class="field-row" style="margin-top:15px;">
+                    <h:commandButton value="Show Selected Values"
+                                     action="#{selfServiceSettingsBBean.printSelections}"
+                                     style="padding:4px 8px; font-size:11px;" />
+                </div>
+
+                <h:panelGroup rendered="#{not empty selfServiceSettingsBBean.selectedSummary}">
+                    <h:outputText value="#{selfServiceSettingsBBean.selectedSummary}" escape="false" />
+                </h:panelGroup>
+            </div>
+        </h:form>
+    </ui:define>
+</ui:composition>

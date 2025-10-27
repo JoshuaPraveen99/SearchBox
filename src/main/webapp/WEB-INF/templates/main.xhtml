@@ -1,0 +1,28 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:ui="http://java.sun.com/jsf/facelets"
+                xmlns:h="http://java.sun.com/jsf/html">
+
+<html>
+<head>
+    <title><ui:insert name="title">Default Title</ui:insert></title>
+    <ui:insert name="head" />
+</head>
+
+<body>
+    <div id="header">
+        <ui:insert name="header">Default Header</ui:insert>
+    </div>
+
+    <div id="content" style="margin-top:15px;">
+        <ui:insert name="content">Default Content</ui:insert>
+    </div>
+
+    <div id="footer" style="margin-top:25px; font-size:small; color:gray;">
+        <ui:insert name="footer">Default Footer</ui:insert>
+    </div>
+</body>
+</html>
+
+</ui:composition>
