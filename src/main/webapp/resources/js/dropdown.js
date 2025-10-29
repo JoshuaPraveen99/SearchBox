@@ -1,157 +1,546 @@
-/* ============ dropdowns.js ============ */
+/* ===========================================================
+   ✅ dropdowns.js – FIXED VERSION with Single Form Submit
+=========================================================== */
 
-// Dropdown initialization
+/* ======= CONFIG ======= */
+const MAX_CHIPS = 20;          // Soft limit - show "+N more" after this
+const ABSOLUTE_MAX_CHIPS = 50; // Hard limit - no selections allowed beyond this
+const COLLAPSE_THRESHOLD = 10; // Show "+N more" after this many visible chips
+
+/* ======= HELPERS ======= */
+function byId(id){ return document.getElementById(id); }
+function qSel(sel){ return document.querySelector(sel); }
+function qAll(sel){ return Array.from(document.querySelectorAll(sel)); }
+
+/* ======= EVENT & PICKUP DROPDOWNS WITH CHIP DISPLAY ======= */
 function initializeCustomDropdowns() {
-    const dropdowns = document.querySelectorAll('.rich-dropdown:not([data-skip-init="true"])');
+  const dropdowns = document.querySelectorAll('.rich-dropdown:not([data-skip-init="true"])');
 
-    dropdowns.forEach(dropdown => {
-        const label = dropdown.querySelector('.rich-dropdown-label');
-        const labelText = dropdown.querySelector('.label-text');
-        const checkboxes = dropdown.querySelectorAll('input[type="checkbox"]');
-        if (!label) return;
-
-        label.addEventListener('click', e => {
-            e.stopPropagation();
-            dropdowns.forEach(d => { if (d !== dropdown) d.classList.remove('open'); });
-            dropdown.classList.toggle('open');
-        });
-
-        checkboxes.forEach(cb => {
-            cb.addEventListener('change', () => {
-                const selected = Array.from(checkboxes)
-                    .filter(c => c.checked)
-                    .map(c => (c.dataset.label || (c.nextElementSibling ? c.nextElementSibling.textContent.trim() : '')));
-                labelText.textContent = selected.length ? selected.join(', ') : labelText.dataset.default;
-            });
-        });
-    });
-
-    document.addEventListener('click', e => {
-        if (!e.target.closest('.rich-dropdown')) {
-            dropdowns.forEach(d => d.classList.remove('open'));
-        }
-    });
-}
-
-// Select-all helpers
-function selectAll(button, selectAll) {
-    const dropdown = button.closest('.rich-dropdown');
-    const checkboxes = dropdown.querySelectorAll('input[type="checkbox"]');
+  dropdowns.forEach(dropdown => {
+    const label = dropdown.querySelector('.rich-dropdown-label');
     const labelText = dropdown.querySelector('.label-text');
-    checkboxes.forEach(cb => {
-        cb.checked = selectAll;
-        cb.dispatchEvent(new Event("change"));
+    const checkboxes = dropdown.querySelectorAll('.dropdown-list input[type="checkbox"]:not(.notification-checkbox)');
+    if (!label) return;
+
+    // Click to toggle dropdown
+    label.addEventListener('click', e => {
+      e.stopPropagation();
+      dropdowns.forEach(d => { if (d !== dropdown) d.classList.remove('open'); });
+      dropdown.classList.toggle('open');
     });
-    const selected = selectAll ? Array.from(checkboxes).map(c =>
-        c.dataset.label || (c.nextElementSibling ? c.nextElementSibling.textContent.trim() : '')
-    ) : [];
-    labelText.textContent = selected.length ? selected.join(', ') : labelText.dataset.default;
+
+    // Update chips display when checkboxes change
+    // NOTE: No Ajax call here anymore - just UI update
+    checkboxes.forEach(cb => {
+      cb.addEventListener('change', () => {
+        updateDropdownChips(dropdown, checkboxes, labelText);
+      });
+    });
+
+    // Initial render
+    updateDropdownChips(dropdown, checkboxes, labelText);
+  });
+
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.rich-dropdown')) {
+      dropdowns.forEach(d => d.classList.remove('open'));
+    }
+  });
 }
 
-/* -------- Notification helpers -------- */
+function updateDropdownChips(dropdown, checkboxes, labelText) {
+  const selected = Array.from(checkboxes)
+    .filter(c => c.checked)
+    .map(c => {
+      const text = c.nextElementSibling?.textContent.trim() || "";
+      return {
+        label: c.dataset.label || text,
+        checkbox: c
+      };
+    });
 
-function autoGrow(ta) {
-  if (!ta) return;
-  ta.style.height = "auto";
-  ta.style.height = ta.scrollHeight + "px";
+  if (selected.length === 0) {
+    labelText.innerHTML = labelText.dataset.default;
+    return;
+  }
+
+  // Check limits
+  const total = selected.length;
+  
+  // Create chips HTML with remove buttons
+  let chipsHTML = '';
+  const visibleCount = Math.min(total, COLLAPSE_THRESHOLD);
+  
+  for (let i = 0; i < visibleCount; i++) {
+    const item = selected[i];
+    chipsHTML += `
+      <span class="dropdown-chip" data-label="${escapeHtml(item.label)}">
+        ${escapeHtml(item.label)}
+        <button type="button" class="dropdown-chip-remove" onclick="removeDropdownChip(this, event)" title="Remove">×</button>
+      </span>
+    `;
+  }
+  
+  // Add "+N more" if needed
+  if (total > COLLAPSE_THRESHOLD) {
+    const remaining = total - COLLAPSE_THRESHOLD;
+    chipsHTML += `
+      <span class="dropdown-chip dropdown-chip-more" onclick="expandDropdownChips(this, event)">
+        +${remaining} more
+      </span>
+    `;
+  }
+  
+  labelText.innerHTML = chipsHTML;
 }
 
-function getNotifInput() {
-  return document.querySelector('[id$="notificationInput"]');
-}
-function getNotifPopup() {
-  return document.querySelector('[id$="notificationSuggestion:list"]');
+function removeDropdownChip(button, event) {
+  event.stopPropagation();
+  event.preventDefault();
+  
+  const chip = button.closest('.dropdown-chip');
+  const dropdown = button.closest('.rich-dropdown');
+  const label = chip.dataset.label;
+  
+  // Find and uncheck the corresponding checkbox
+  const checkboxes = dropdown.querySelectorAll('.dropdown-list input[type="checkbox"]');
+  checkboxes.forEach(cb => {
+    const cbLabel = cb.dataset.label || cb.nextElementSibling?.textContent.trim();
+    if (cbLabel === label) {
+      cb.checked = false;
+      // NOTE: No Ajax call - just trigger change event for UI update
+      cb.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
 }
 
-/* Show popup while typing */
-function openSuggestionBoxForInput(inputEl) {
+function expandDropdownChips(chip, event) {
+  event.stopPropagation();
+  event.preventDefault();
+  
+  const dropdown = chip.closest('.rich-dropdown');
+  const labelText = dropdown.querySelector('.label-text');
+  const checkboxes = dropdown.querySelectorAll('.dropdown-list input[type="checkbox"]');
+  
+  // Get all selected items
+  const selected = Array.from(checkboxes)
+    .filter(c => c.checked)
+    .map(c => {
+      const text = c.nextElementSibling?.textContent.trim() || "";
+      return c.dataset.label || text;
+    });
+  
+  // Show all chips without "+N more"
+  let chipsHTML = '';
+  selected.forEach(item => {
+    chipsHTML += `
+      <span class="dropdown-chip" data-label="${escapeHtml(item)}">
+        ${escapeHtml(item)}
+        <button type="button" class="dropdown-chip-remove" onclick="removeDropdownChip(this, event)" title="Remove">×</button>
+      </span>
+    `;
+  });
+  
+  labelText.innerHTML = chipsHTML;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function selectAll(button, flag) {
+  const dropdown = button.closest('.rich-dropdown');
+  const checkboxes = dropdown.querySelectorAll('.dropdown-list input[type="checkbox"]:not(.notification-checkbox)');
+  const labelText = dropdown.querySelector('.label-text');
+  
+  // Count current selections
+  const currentCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+  
+  if (flag) {
+    // Check if selecting all would exceed absolute max
+    if (checkboxes.length > ABSOLUTE_MAX_CHIPS) {
+      toast(`Maximum ${ABSOLUTE_MAX_CHIPS} selections allowed`);
+      return;
+    }
+  }
+  
+  checkboxes.forEach(cb => {
+    if (cb.checked !== flag) {
+      cb.checked = flag;
+      // NOTE: No Ajax call - just trigger change event for UI update
+      cb.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
+
+  updateDropdownChips(dropdown, checkboxes, labelText);
+}
+
+/* ======= NEW: Form submission handler ======= */
+function prepareFormSubmit() {
+  // Get Event Codes dropdown (first rich-dropdown)
+  const eventDropdown = document.querySelector('.rich-dropdown:nth-of-type(1)');
+  const eventCheckboxes = eventDropdown ? 
+    eventDropdown.querySelectorAll('.dropdown-list input[type="checkbox"]:checked') : [];
+  
+  const selectedEventCodes = Array.from(eventCheckboxes)
+    .map(cb => cb.dataset.label || cb.nextElementSibling?.textContent.trim())
+    .filter(Boolean);
+  
+  // Get Pickup Types dropdown (second rich-dropdown)
+  const pickupDropdown = document.querySelector('.rich-dropdown:nth-of-type(2)');
+  const pickupCheckboxes = pickupDropdown ? 
+    pickupDropdown.querySelectorAll('.dropdown-list input[type="checkbox"]:checked') : [];
+  
+  const selectedPickupTypes = Array.from(pickupCheckboxes)
+    .map(cb => cb.dataset.label || cb.nextElementSibling?.textContent.trim())
+    .filter(Boolean);
+  
+  // Set hidden fields
+  const eventCodesInput = document.getElementById('formId:selectedEventCodes');
+  const pickupTypesInput = document.getElementById('formId:selectedPickupTypes');
+  
+  if (eventCodesInput) {
+    eventCodesInput.value = selectedEventCodes.join(',');
+    console.log('Event Codes to submit:', selectedEventCodes.join(','));
+  }
+  
+  if (pickupTypesInput) {
+    pickupTypesInput.value = selectedPickupTypes.join(',');
+    console.log('Pickup Types to submit:', selectedPickupTypes.join(','));
+  }
+  
+  // Return true to allow form submission to proceed
+  return true;
+}
+
+/* ======= NOTIFICATION CHIPS + SUGGESTIONS ======= */
+function getChipWrapper(){ return byId('formId:chipInputWrapper'); }
+function getChipsContainer(){ return byId('chipsContainer'); }
+function getChipEditor(){ return byId('formId:chipInput'); }
+function getNotifPopup(){ return qSel('[id$="notificationSuggestion:list"]'); }
+
+function getListCheckboxNodeByLabel(label){
+  // Find the checkbox in the suggestion list row whose sibling text equals label
+  const rows = qAll('[id$="notificationSuggestion:list"] input[type="checkbox"]');
+  for (const cb of rows) {
+    const rowText = (cb.parentNode?.textContent || '').trim();
+    // Extract just the message text (after the checkbox)
+    const textNode = cb.nextSibling;
+    const msgText = textNode ? textNode.textContent.trim() : '';
+    if (msgText === label || rowText.endsWith(label)) return cb;
+  }
+  return null;
+}
+
+function focusChipEditor(){
+  const ed = getChipEditor();
+  if (ed){ ed.focus(); openNotifPopup(); }
+}
+
+function openNotifPopup(){
   const popup = getNotifPopup();
-  if (popup) popup.style.display = "block";
-  autoGrow(inputEl);
+  if (popup){ popup.style.display = 'block'; }
 }
 
-/* Close on outside click (and don’t close when clicking inside) */
-function bindOutsideCloser() {
-  document.addEventListener('mousedown', outsideCloser, { capture: true });
+function keepNotifPopupOpen(){
+  setTimeout(() => {
+    const ed = getChipEditor();
+    if (ed){ ed.focus(); openNotifPopup(); }
+  }, 50);
 }
-function outsideCloser(e) {
-  const input = getNotifInput();
+
+function closeNotifPopupIfOutside(e){
+  const wrap = getChipWrapper();
   const popup = getNotifPopup();
-  if (!input || !popup) return;
-
-  const inside = input.contains(e.target) || popup.contains(e.target);
-  if (!inside) popup.style.display = "none";
+  if (!wrap || !popup) return;
+  const inside = wrap.contains(e.target) || popup.contains(e.target);
+  if (!inside) popup.style.display = 'none';
 }
 
-/* Keep clicks inside popup from bubbling to the document */
-function stopPopupPropagation() {
+function lastToken(str){
+  const parts = (str || "").split(",");
+  return (parts[parts.length-1] || "").trim();
+}
+
+function handleChipTyping(ev){
+  const token = lastToken(ev.target.value);
+  if (token.length > 0) openNotifPopup();
+}
+
+/* ======= CHIP UI: instant client-side updates ======= */
+function chipExists(label){
+  return !!qSel(`.chip[data-label="${cssEscape(label)}"]`);
+}
+function cssEscape(s){ return (s || "").replace(/"/g,'\\"'); }
+
+function addChip(label, {silent=false} = {}){
+  if (!label) return;
+
+  // Check absolute max limit
+  const count = getChipCount();
+  if (count >= ABSOLUTE_MAX_CHIPS){
+    toast(`Maximum ${ABSOLUTE_MAX_CHIPS} selections allowed`);
+    // revert checkbox UI if this came from a toggle
+    const cb = getListCheckboxNodeByLabel(label);
+    if (cb) cb.checked = false;
+    return;
+  }
+
+  if (chipExists(label)) return; // no duplicates
+
+  const chips = getChipsContainer();
+  const chip = document.createElement('span');
+  chip.className = 'chip';
+  chip.setAttribute('data-label', label);
+  chip.innerHTML = `
+    <span class="chip-text" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
+    <button type="button" class="chip-remove" title="Remove">×</button>
+  `;
+  chip.querySelector('.chip-remove').addEventListener('click', () => onChipRemove(label));
+  chips.appendChild(chip);
+
+  updateChipCounterAndCollapse();
+
+  if (!silent) {
+    // Sync server in background (notifications still use Ajax per-item)
+    window.rfToggleNotif && rfToggleNotif(label, true);
+  }
+}
+
+function removeChip(label, {silent=false} = {}){
+  const el = qSel(`.chip[data-label="${cssEscape(label)}"]`);
+  if (el) el.remove();
+
+  updateChipCounterAndCollapse();
+
+  if (!silent) {
+    window.rfToggleNotif && rfToggleNotif(label, false);
+  }
+}
+
+function onChipRemove(label){
+  // Update UI now
+  removeChip(label);
+  
+  // Also uncheck the checkbox in the suggestion list UI, if visible
+  const cb = getListCheckboxNodeByLabel(label);
+  if (cb) {
+    cb.checked = false;
+    // Sync to server
+    window.rfToggleNotif && rfToggleNotif(label, false);
+  }
+  
+  keepNotifPopupOpen();
+}
+
+function getChipCount(){
+  return qAll('.chip[data-label]').length;
+}
+
+function updateChipCounterAndCollapse(){
+  const cntEl = byId('chipCounter');
+  const chips = qAll('.chip[data-label]');
+  const total = chips.length;
+
+  if (cntEl){
+    cntEl.textContent = MAX_CHIPS ? `${total}/${ABSOLUTE_MAX_CHIPS}` : `${total}`;
+  }
+
+  // Collapse logic: show first N, collapse rest into +N more
+  const container = getChipsContainer();
+  // clear previous "+N more"
+  qAll('.chip-more').forEach(e => e.remove());
+
+  if (total > MAX_CHIPS){
+    chips.forEach((c, idx) => c.style.display = (idx < MAX_CHIPS ? 'inline-flex' : 'none'));
+    const more = document.createElement('span');
+    more.className = 'chip chip-more';
+    more.textContent = `+${total - MAX_CHIPS} more`;
+    more.title = 'Click to show all';
+    more.onclick = () => {
+      chips.forEach(c => c.style.display = 'inline-flex');
+      more.remove();
+    };
+    container.appendChild(more);
+  } else {
+    chips.forEach(c => c.style.display = 'inline-flex');
+  }
+}
+
+/* === Hook checkbox changes from suggestion rows === */
+function onSuggestionToggle(cb, label){
+  if (cb.checked) {
+    addChip(label);
+  } else {
+    removeChip(label);
+  }
+  keepNotifPopupOpen();
+}
+
+/* ======= SELECT ALL / CLEAR ALL FOR NOTIFICATIONS ======= */
+function selectAllNotifications(event) {
+  // Prevent event propagation and default behavior
+  if (event) {
+    event.stopPropagation();
+    event.preventDefault();
+  }
+  
+  console.log('Select All clicked');
+  
+  // Get the suggestion popup
   const popup = getNotifPopup();
-  if (popup) popup.addEventListener('mousedown', function(ev){ ev.stopPropagation(); });
+  if (!popup) {
+    console.log('Popup not found');
+    return false;
+  }
+  
+  // Find all checkboxes in the suggestion list
+  // RichFaces generates these dynamically
+  const checkboxes = Array.from(popup.querySelectorAll('input[type="checkbox"].notification-checkbox'));
+  console.log('Found checkboxes:', checkboxes.length);
+  
+  const currentCount = getChipCount();
+  
+  // Check if selecting all would exceed absolute max
+  if (currentCount + checkboxes.length > ABSOLUTE_MAX_CHIPS) {
+    toast(`Maximum ${ABSOLUTE_MAX_CHIPS} selections allowed`);
+    keepNotifPopupOpen();
+    return false;
+  }
+  
+  // Process each checkbox
+  checkboxes.forEach((cb, index) => {
+    if (!cb.checked) {
+      // Get the label text - it's the next sibling text node
+      const parent = cb.parentElement;
+      const label = parent ? parent.textContent.trim() : '';
+      
+      console.log(`Checking item ${index}: ${label}`);
+      
+      if (label) {
+        // Check the checkbox
+        cb.checked = true;
+        
+        // Add chip to UI
+        addChip(label, {silent: false});
+      }
+    }
+  });
+  
+  // Keep popup open
+  setTimeout(() => {
+    keepNotifPopupOpen();
+  }, 150);
+  
+  return false;
 }
 
-/* Rebind after RichFaces partial updates */
-function rebindAfterAjax() {
-  const input = getNotifInput();
-  if (input) autoGrow(input);
-  stopPopupPropagation();
+function clearAllNotifications(event) {
+  // Prevent event propagation and default behavior
+  if (event) {
+    event.stopPropagation();
+    event.preventDefault();
+  }
+  
+  console.log('Clear All clicked');
+  
+  // Get the suggestion popup
+  const popup = getNotifPopup();
+  if (!popup) {
+    console.log('Popup not found');
+    return false;
+  }
+  
+  // Find all checkboxes in the suggestion list
+  const checkboxes = Array.from(popup.querySelectorAll('input[type="checkbox"].notification-checkbox'));
+  console.log('Found checkboxes:', checkboxes.length);
+  
+  // Process each checkbox
+  checkboxes.forEach((cb, index) => {
+    if (cb.checked) {
+      // Get the label text
+      const parent = cb.parentElement;
+      const label = parent ? parent.textContent.trim() : '';
+      
+      console.log(`Unchecking item ${index}: ${label}`);
+      
+      // Uncheck the checkbox
+      cb.checked = false;
+      
+      if (label) {
+        // Remove chip from UI
+        removeChip(label, {silent: false});
+      }
+    }
+  });
+  
+  // Also clear any remaining chips in the UI
+  const allChips = qAll('.chip[data-label]');
+  allChips.forEach(chip => {
+    const label = chip.getAttribute('data-label');
+    if (label) {
+      removeChip(label, {silent: false});
+    }
+  });
+  
+  // Keep popup open
+  setTimeout(() => {
+    keepNotifPopupOpen();
+  }, 150);
+  
+  return false;
 }
 
+/* ======= Toast (lightweight) ======= */
+function toast(msg){
+  const el = document.createElement('div');
+  el.textContent = msg;
+  Object.assign(el.style, {
+    position:'fixed', bottom:'16px', right:'16px', padding:'10px 14px',
+    background:'#111827', color:'#fff', borderRadius:'8px',
+    fontSize:'12px', boxShadow:'0 6px 20px rgba(0,0,0,.25)', zIndex: 999999
+  });
+  document.body.appendChild(el);
+  setTimeout(()=> el.remove(), 2500);
+}
+
+/* ======= INIT / REBIND ======= */
 window.addEventListener('load', () => {
-  const input = getNotifInput();
-  if (input) autoGrow(input);
-  bindOutsideCloser();
-  stopPopupPropagation();
+  initializeCustomDropdowns();
+
+  // Build initial chips from any preselected items on first load
+  const preChecked = qAll('[id$="notificationSuggestion:list"] input[type="checkbox"]:checked');
+  preChecked.forEach(cb => {
+    const labelNode = cb.nextSibling;
+    const label = labelNode ? labelNode.textContent.trim() : '';
+    if (label) addChip(label, {silent:true});
+  });
+  updateChipCounterAndCollapse();
+
+  document.addEventListener('mousedown', closeNotifPopupIfOutside, { capture: true });
 });
 
-function positionNotifPopup() {
-    const input = document.getElementById('formId:notificationInput');
-    const popup = document.getElementById('formId:notificationSuggestion');
-
-    if (!input || !popup) return;
-
-    // Anchor position directly under textarea
-    const rect = input.getBoundingClientRect();
-    popup.style.position = "absolute";
-    popup.style.top = (window.scrollY + rect.bottom + 2) + "px";
-    popup.style.left = (window.scrollX + rect.left) + "px";
-    popup.style.width = rect.width + "px";
-
-    popup.style.display = "block";
-
-    bindOutsideClickForNotifPopup();
-}
-
-function bindOutsideClickForNotifPopup() {
-    document.addEventListener("mousedown", closeNotifPopupOnOutside);
-}
-
-function closeNotifPopupOnOutside(e) {
-    const popup = document.getElementById('formId:notificationSuggestion');
-    const input = document.getElementById('formId:notificationInput');
-
-    if (!popup || !input) return;
-
-    if (!popup.contains(e.target) && !input.contains(e.target)) {
-        popup.style.display = "none";
-        document.removeEventListener("mousedown", closeNotifPopupOnOutside);
-    }
-}
 if (window.A4J && A4J.AJAX) {
-    A4J.AJAX.AddListener({
-        oncomplete: function() {
-            positionNotifPopup(); // ✅ Keeps popup aligned after checkbox click
+  A4J.AJAX.AddListener({
+    onbeforedomupdate: function(){ window._sb_keep_open = true; },
+    oncomplete: function() {
+      // After any RF update, reinitialize dropdowns and keep notification popup open
+      initializeCustomDropdowns();
+      
+      // Resync notification checkboxes with chips
+      const allChips = qAll('.chip[data-label]');
+      allChips.forEach(chip => {
+        const label = chip.getAttribute('data-label');
+        const cb = getListCheckboxNodeByLabel(label);
+        if (cb && !cb.checked) {
+          cb.checked = true;
         }
-    });
-}
-
-if (window.A4J && A4J.AJAX) {
-  A4J.AJAX.AddListener({ oncomplete: rebindAfterAjax });
-}
-
-// Reinitialize after full load or RichFaces partial update
-window.addEventListener('load', () => initializeCustomDropdowns());
-if (window.A4J && A4J.AJAX) {
-    A4J.AJAX.AddListener({
-        oncomplete: () => initializeCustomDropdowns()
-    });
+      });
+      
+      keepNotifPopupOpen();
+      window._sb_keep_open = false;
+    }
+  });
 }
