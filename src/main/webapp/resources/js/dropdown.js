@@ -247,8 +247,15 @@ function openNotifPopup(){
 function keepNotifPopupOpen(){
   setTimeout(() => {
     const ed = getChipEditor();
-    if (ed){ ed.focus(); openNotifPopup(); }
-  }, 50);
+    if (ed){
+      // Clear the input field to show all suggestions, not filtered ones
+      ed.value = '';
+      ed.focus();
+      openNotifPopup();
+      // Trigger input event to force RichFaces to refresh suggestions
+      ed.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }, 200); // Increased delay for better reliability with RichFaces AJAX updates
 }
 
 function closeNotifPopupIfOutside(e){
@@ -323,7 +330,7 @@ function removeChip(label, {silent=false} = {}){
 function onChipRemove(label){
   // Update UI now
   removeChip(label);
-  
+
   // Also uncheck the checkbox in the suggestion list UI, if visible
   const cb = getListCheckboxNodeByLabel(label);
   if (cb) {
@@ -331,7 +338,13 @@ function onChipRemove(label){
     // Sync to server
     window.rfToggleNotif && rfToggleNotif(label, false);
   }
-  
+
+  // ISSUE C FIX: Clear input field when removing a chip too
+  const ed = getChipEditor();
+  if (ed) {
+    ed.value = '';
+  }
+
   keepNotifPopupOpen();
 }
 
@@ -376,6 +389,14 @@ function onSuggestionToggle(cb, label){
   } else {
     removeChip(label);
   }
+
+  // ISSUE C FIX: Clear the input field immediately after selection
+  // This ensures no letter remains next to the chips and allows re-typing the same letter
+  const ed = getChipEditor();
+  if (ed) {
+    ed.value = '';
+  }
+
   keepNotifPopupOpen();
 }
 
@@ -386,54 +407,60 @@ function selectAllNotifications(event) {
     event.stopPropagation();
     event.preventDefault();
   }
-  
+
   console.log('Select All clicked');
-  
+
   // Get the suggestion popup
   const popup = getNotifPopup();
   if (!popup) {
     console.log('Popup not found');
     return false;
   }
-  
-  // Find all checkboxes in the suggestion list
-  // RichFaces generates these dynamically
-  const checkboxes = Array.from(popup.querySelectorAll('input[type="checkbox"].notification-checkbox'));
+
+  // ISSUE B FIX: Find all checkboxes without requiring .notification-checkbox class
+  // Use the same selector pattern as getListCheckboxNodeByLabel()
+  const checkboxes = Array.from(popup.querySelectorAll('input[type="checkbox"]'));
   console.log('Found checkboxes:', checkboxes.length);
-  
+
   const currentCount = getChipCount();
-  
+
+  // Calculate how many unchecked items we'd be adding
+  const uncheckedCount = checkboxes.filter(cb => !cb.checked).length;
+
   // Check if selecting all would exceed absolute max
-  if (currentCount + checkboxes.length > ABSOLUTE_MAX_CHIPS) {
+  if (currentCount + uncheckedCount > ABSOLUTE_MAX_CHIPS) {
     toast(`Maximum ${ABSOLUTE_MAX_CHIPS} selections allowed`);
     keepNotifPopupOpen();
     return false;
   }
-  
+
   // Process each checkbox
   checkboxes.forEach((cb, index) => {
     if (!cb.checked) {
-      // Get the label text - it's the next sibling text node
-      const parent = cb.parentElement;
-      const label = parent ? parent.textContent.trim() : '';
-      
+      // ISSUE B FIX: Get the label text using nextSibling like getListCheckboxNodeByLabel()
+      const textNode = cb.nextSibling;
+      const label = textNode ? textNode.textContent.trim() : '';
+
       console.log(`Checking item ${index}: ${label}`);
-      
+
       if (label) {
         // Check the checkbox
         cb.checked = true;
-        
+
         // Add chip to UI
         addChip(label, {silent: false});
       }
     }
   });
-  
-  // Keep popup open
-  setTimeout(() => {
-    keepNotifPopupOpen();
-  }, 150);
-  
+
+  // ISSUE A FIX: Clear input and keep popup open with all suggestions visible
+  const ed = getChipEditor();
+  if (ed) {
+    ed.value = '';
+  }
+
+  keepNotifPopupOpen();
+
   return false;
 }
 
@@ -443,40 +470,40 @@ function clearAllNotifications(event) {
     event.stopPropagation();
     event.preventDefault();
   }
-  
+
   console.log('Clear All clicked');
-  
+
   // Get the suggestion popup
   const popup = getNotifPopup();
   if (!popup) {
     console.log('Popup not found');
     return false;
   }
-  
-  // Find all checkboxes in the suggestion list
-  const checkboxes = Array.from(popup.querySelectorAll('input[type="checkbox"].notification-checkbox'));
+
+  // ISSUE B FIX: Find all checkboxes without requiring .notification-checkbox class
+  const checkboxes = Array.from(popup.querySelectorAll('input[type="checkbox"]'));
   console.log('Found checkboxes:', checkboxes.length);
-  
+
   // Process each checkbox
   checkboxes.forEach((cb, index) => {
     if (cb.checked) {
-      // Get the label text
-      const parent = cb.parentElement;
-      const label = parent ? parent.textContent.trim() : '';
-      
+      // ISSUE B FIX: Get the label text using nextSibling like getListCheckboxNodeByLabel()
+      const textNode = cb.nextSibling;
+      const label = textNode ? textNode.textContent.trim() : '';
+
       console.log(`Unchecking item ${index}: ${label}`);
-      
+
       // Uncheck the checkbox
       cb.checked = false;
-      
+
       if (label) {
         // Remove chip from UI
         removeChip(label, {silent: false});
       }
     }
   });
-  
-  // Also clear any remaining chips in the UI
+
+  // Also clear any remaining chips in the UI (safety net)
   const allChips = qAll('.chip[data-label]');
   allChips.forEach(chip => {
     const label = chip.getAttribute('data-label');
@@ -484,12 +511,15 @@ function clearAllNotifications(event) {
       removeChip(label, {silent: false});
     }
   });
-  
-  // Keep popup open
-  setTimeout(() => {
-    keepNotifPopupOpen();
-  }, 150);
-  
+
+  // ISSUE A FIX: Clear input and keep popup open with all suggestions visible
+  const ed = getChipEditor();
+  if (ed) {
+    ed.value = '';
+  }
+
+  keepNotifPopupOpen();
+
   return false;
 }
 
