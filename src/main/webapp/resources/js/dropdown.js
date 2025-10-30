@@ -1,5 +1,7 @@
 /* ===========================================================
-   ✅ dropdown.js – FINAL FIXED VERSION (RichFaces Safe)
+   dropdown.js – FINAL (with server-backed chips restore)
+   - Adds attachChipRemoveListeners() and wires it in load/oncomplete
+   - Keeps original dynamic behaviors intact
 =========================================================== */
 
 /* ======= CONFIG ======= */
@@ -378,6 +380,22 @@ function clearAllNotifications(event) {
   return false;
 }
 
+/* ======= ATTACH LISTENERS FOR SERVER-RENDERED CHIPS ======= */
+function attachChipRemoveListeners() {
+  qAll('.chip .chip-remove').forEach(btn => {
+    if (btn._bound) return;
+    btn._bound = true;
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      const chip = btn.closest('.chip');
+      if (!chip) return;
+      const label = chip.getAttribute('data-label') || chip.dataset.label;
+      if (!label) return;
+      onChipRemove(label);
+    });
+  });
+}
+
 /* ======= TOAST ======= */
 function toast(msg) {
   const el = document.createElement('div');
@@ -395,12 +413,19 @@ function toast(msg) {
 /* ======= INIT ======= */
 window.addEventListener('load', () => {
   initializeCustomDropdowns();
+
+  // restore chips from any pre-checked suggestionbox checkboxes (if popup present)
   const preChecked = qAll('[id$="notificationSuggestion:list"] input[type="checkbox"]:checked');
   preChecked.forEach(cb => {
     const label = extractLabelFromCheckbox(cb);
     if (label) addChip(label, { silent: true });
   });
+
   updateChipCounterAndCollapse();
+
+  // Attach handlers for server-rendered chips (ui:repeat generated)
+  attachChipRemoveListeners();
+
   document.addEventListener('mousedown', closeNotifPopupIfOutside, { capture: true });
 });
 
@@ -416,6 +441,9 @@ if (window.A4J && A4J.AJAX) {
         if (cb && !cb.checked) cb.checked = true;
       });
       keepNotifPopupOpen();
+      // ensure server-rendered chips have remove listeners wired
+      attachChipRemoveListeners();
+      updateChipCounterAndCollapse();
       window._sb_keep_open = false;
     }
   });

@@ -13,7 +13,6 @@
     <ui:define name="head">
 <style type="text/css">
 /* ===================== PAGE LAYOUT ===================== */
-/* ===================== PAGE LAYOUT ===================== */
 .form-section { margin: 20px; font-family: Arial, sans-serif; }
 .field-row { display: flex; align-items: flex-start; gap: 20px; margin-bottom: 12px; }
 .field-label { width: 120px; font-weight: bold; font-size: 12px; line-height: 24px; }
@@ -328,9 +327,8 @@ button:disabled {
 }
 </style>
 
-		<script type="text/javascript" src="#{facesContext.externalContext.requestContextPath}/resources/js/dropdown.js"></script>
+        <script type="text/javascript" src="#{facesContext.externalContext.requestContextPath}/resources/js/dropdown.js"></script>
 
-        
     </ui:define>
 
    <ui:define name="content">
@@ -338,126 +336,130 @@ button:disabled {
             <div class="form-section">
 
                 <!-- ===================== FIRST ROW: 3 DROPDOWNS SIDE BY SIDE ===================== -->
-				<div class="field-row">
-					<!-- Event Codes Dropdown -->
-					<span class="field-label">Event Codes:</span>
-					<div class="rich-dropdown">
-						<div class="rich-dropdown-label">
-							<span class="label-text" data-default="Select Event Codes">Select Event Codes</span>
-							<span>▼</span>
-						</div>
-						<div class="dropdown-list">
-							<div class="dropdown-actions">
-								<button type="button" onclick="selectAll(this, true); return false;">Select All</button>
-								<button type="button" onclick="selectAll(this, false); return false;">Clear All</button>
-							</div>
+                <div class="field-row">
+                    <!-- Event Codes Dropdown -->
+                    <span class="field-label">Event Codes:</span>
+                    <div class="rich-dropdown">
+                        <div class="rich-dropdown-label">
+                            <span class="label-text" data-default="Select Event Codes">Select Event Codes</span>
+                            <span>▼</span>
+                        </div>
+                        <div class="dropdown-list">
+                            <div class="dropdown-actions">
+                                <button type="button" onclick="selectAll(this, true); return false;">Select All</button>
+                                <button type="button" onclick="selectAll(this, false); return false;">Clear All</button>
+                            </div>
 
-							<ui:repeat value="#{selfServiceSettingsBBean.eventCodesList}" var="code">
-								<label title="#{selfServiceSettingsBBean.eventCodeTooltips[code]}">
-									<!-- ✅ REMOVED: a4j:support - No more individual Ajax calls -->
-									<h:selectBooleanCheckbox
-										value="#{selfServiceSettingsBBean.selectedEventCodesMap[code]}"
-										data-label="#{code}" />
-									<h:outputText value="#{code}" style="margin-left:5px;" />
-								</label>
-							</ui:repeat>
-						</div>
-					</div>
+                            <ui:repeat value="#{selfServiceSettingsBBean.eventCodesList}" var="code">
+                                <label title="#{selfServiceSettingsBBean.eventCodeTooltips[code]}">
+                                    <h:selectBooleanCheckbox
+                                        value="#{selfServiceSettingsBBean.selectedEventCodesMap[code]}"
+                                        data-label="#{code}" />
+                                    <h:outputText value="#{code}" style="margin-left:5px;" />
+                                </label>
+                            </ui:repeat>
+                        </div>
+                    </div>
 
-					<!-- Pickup Type Dropdown -->
-					<span class="field-label">Pickup Type:</span>
-					<div class="rich-dropdown">
-						<div class="rich-dropdown-label">
-							<span class="label-text" data-default="Select Pickup Type">Select Pickup Type</span>
-							<span>▼</span>
-						</div>
-						<div class="dropdown-list">
-							<div class="dropdown-actions">
-								<button type="button" onclick="selectAll(this, true); return false;">Select All</button>
-								<button type="button" onclick="selectAll(this, false); return false;">Clear All</button>
-							</div>
+                    <!-- Pickup Type Dropdown -->
+                    <span class="field-label">Pickup Type:</span>
+                    <div class="rich-dropdown">
+                        <div class="rich-dropdown-label">
+                            <span class="label-text" data-default="Select Pickup Type">Select Pickup Type</span>
+                            <span>▼</span>
+                        </div>
+                        <div class="dropdown-list">
+                            <div class="dropdown-actions">
+                                <button type="button" onclick="selectAll(this, true); return false;">Select All</button>
+                                <button type="button" onclick="selectAll(this, false); return false;">Clear All</button>
+                            </div>
 
-							<ui:repeat value="#{selfServiceSettingsBBean.pickupTypeList}" var="type">
-								<label>
-									<!-- ✅ REMOVED: a4j:support - No more individual Ajax calls -->
-									<h:selectBooleanCheckbox
-										value="#{selfServiceSettingsBBean.selectedPickupTypeMap[type]}"
-										data-label="#{type}" />
-									<h:outputText value="#{type}" style="margin-left:5px;" />
-								</label>
-							</ui:repeat>
-						</div>
-					</div>
+                            <ui:repeat value="#{selfServiceSettingsBBean.pickupTypeList}" var="type">
+                                <label>
+                                    <h:selectBooleanCheckbox
+                                        value="#{selfServiceSettingsBBean.selectedPickupTypeMap[type]}"
+                                        data-label="#{type}" />
+                                    <h:outputText value="#{type}" style="margin-left:5px;" />
+                                </label>
+                            </ui:repeat>
+                        </div>
+                    </div>
 
-					<!-- Notification Messages -->
-					<div class="field-label">Notification Messages:</div>
+                    <!-- Notification Messages -->
+                    <div class="field-label">Notification Messages:</div>
 
-					<div class="field-col">
-						<!-- Chip Input (JSF id so we can still address it if needed) -->
-						<h:panelGroup id="chipInputWrapper" layout="block"
-							styleClass="chip-input" onclick="focusChipEditor()">
-							<!-- Counter (optional, will be updated by JS) -->
-							<span id="chipCounter" class="chip-counter"></span>
+                    <div class="field-col">
+                        <!-- Chip Input (JSF id so we can still address it if needed) -->
+                        <h:panelGroup id="chipInputWrapper" layout="block"
+                            styleClass="chip-input" onclick="focusChipEditor()">
+                            <!-- Counter (optional, will be updated by JS) -->
+                            <span id="chipCounter" class="chip-counter"></span>
 
-							<!-- Chips container (pure HTML, managed by JS) -->
-							<span id="chipsContainer" class="chips-container"></span>
+                            <!-- Chips container (now backed by server, but still JS-enhanced) -->
+                            <span id="chipsContainer" class="chips-container">
+                                <ui:repeat value="#{selfServiceSettingsBBean.selectedNotificationList}" var="msg">
+                                    <span class="chip" data-label="#{msg}">
+                                        <span class="chip-text" title="#{msg}">#{msg}</span>
+                                        <button type="button" class="chip-remove" title="Remove">×</button>
+                                    </span>
+                                </ui:repeat>
+                            </span>
 
-							<!-- Inline editor used for typing & suggestionbox anchor -->
-							<h:inputText id="chipInput"
-								value="#{selfServiceSettingsBBean.chipQuery}"
-								styleClass="chip-editor-input" onkeyup="handleChipTyping(event)"
-								onfocus="openNotifPopup()" autocomplete="off" />
-						</h:panelGroup>
+                            <!-- Inline editor used for typing & suggestionbox anchor -->
+                            <h:inputText id="chipInput"
+                                value="#{selfServiceSettingsBBean.chipQuery}"
+                                styleClass="chip-editor-input" onkeyup="handleChipTyping(event)"
+                                onfocus="openNotifPopup()" autocomplete="off" />
+                        </h:panelGroup>
 
-						<!-- Suggestionbox (bound to inline editor input) -->
-						<rich:suggestionbox id="notificationSuggestion" for="chipInput"
-							suggestionAction="#{selfServiceSettingsBBean.filterNotificationMessages}"
-							var="msg" minChars="0" tokens="," width="300" height="250"
-							directInputSuggestions="true" usingSuggestObjects="false"
-							nothingLabel="" shadowOpacity="0">
+                        <!-- Suggestionbox (bound to inline editor input) -->
+                        <rich:suggestionbox id="notificationSuggestion" for="chipInput"
+                            suggestionAction="#{selfServiceSettingsBBean.filterNotificationMessages}"
+                            var="msg" minChars="0" tokens="," width="300" height="250"
+                            directInputSuggestions="true" usingSuggestObjects="false"
+                            nothingLabel="" shadowOpacity="0">
 
-							<!-- Select All / Clear All buttons at top -->
-							<f:facet name="header">
-								<div class="suggestion-actions">
-									<button type="button" onmousedown="return selectAllNotifications(event);" onclick="event.stopPropagation(); return false;">Select All</button>
-									<button type="button" onmousedown="return clearAllNotifications(event);" onclick="event.stopPropagation(); return false;">Clear All</button>
-								</div>
-							</f:facet>
+                            <!-- Select All / Clear All buttons at top -->
+                            <f:facet name="header">
+                                <div class="suggestion-actions">
+                                    <button type="button" onmousedown="return selectAllNotifications(event);" onclick="event.stopPropagation(); return false;">Select All</button>
+                                    <button type="button" onmousedown="return clearAllNotifications(event);" onclick="event.stopPropagation(); return false;">Clear All</button>
+                                </div>
+                            </f:facet>
 
-							<h:column>
-								<div style="display: flex; align-items: center; gap: 8px; cursor: pointer;"
-									onclick="event.stopPropagation(); keepNotifPopupOpen();">
-									<h:selectBooleanCheckbox
-										value="#{selfServiceSettingsBBean.selectedNotificationMap[msg]}"
-										styleClass="notification-checkbox"
-										onchange="onSuggestionToggle(this, '#{msg}'); event.stopPropagation();">
-									</h:selectBooleanCheckbox>
-									<h:outputText value="#{msg}" />
-								</div>
-							</h:column>
-						</rich:suggestionbox>
-					</div>
-				</div>
+                            <h:column>
+                                <div style="display: flex; align-items: center; gap: 8px; cursor: pointer;"
+                                    onclick="event.stopPropagation(); keepNotifPopupOpen();">
+                                    <h:selectBooleanCheckbox
+                                        value="#{selfServiceSettingsBBean.selectedNotificationMap[msg]}"
+                                        styleClass="notification-checkbox"
+                                        onchange="onSuggestionToggle(this, '#{msg}'); event.stopPropagation();">
+                                    </h:selectBooleanCheckbox>
+                                    <h:outputText value="#{msg}" />
+                                </div>
+                            </h:column>
+                        </rich:suggestionbox>
+                    </div>
+                </div>
 
-				<!-- ✅ NEW: Hidden inputs to capture selections on form submit -->
-				<h:inputHidden id="selectedEventCodes" 
-					value="#{selfServiceSettingsBBean.selectedEventCodesString}" />
-				<h:inputHidden id="selectedPickupTypes" 
-					value="#{selfServiceSettingsBBean.selectedPickupTypesString}" />
+                <!-- ✅ NEW: Hidden inputs to capture selections on form submit -->
+                <h:inputHidden id="selectedEventCodes" 
+                    value="#{selfServiceSettingsBBean.selectedEventCodesString}" />
+                <h:inputHidden id="selectedPickupTypes" 
+                    value="#{selfServiceSettingsBBean.selectedPickupTypesString}" />
 
-				<!-- jsFunction to sync map on server (notifications only) -->
-				<a4j:jsFunction name="rfToggleNotif"
-					action="#{selfServiceSettingsBBean.toggleNotification}"
-					limitToList="true">
-					<a4j:actionparam name="label"
-						assignTo="#{selfServiceSettingsBBean.toggleLabel}" />
-					<a4j:actionparam name="checked"
-						assignTo="#{selfServiceSettingsBBean.toggleChecked}" />
-				</a4j:jsFunction>
+                <!-- jsFunction to sync map on server (notifications only) -->
+                <a4j:jsFunction name="rfToggleNotif"
+                    action="#{selfServiceSettingsBBean.toggleNotification}"
+                    limitToList="true">
+                    <a4j:actionparam name="label"
+                        assignTo="#{selfServiceSettingsBBean.toggleLabel}" />
+                    <a4j:actionparam name="checked"
+                        assignTo="#{selfServiceSettingsBBean.toggleChecked}" />
+                </a4j:jsFunction>
 
-				<!-- ===================== BUTTON AND OUTPUT ===================== -->
+                <!-- ===================== BUTTON AND OUTPUT ===================== -->
                 <div class="field-row" style="margin-top:15px;">
-                    <!-- ✅ MODIFIED: onclick calls prepareFormSubmit() before form submission -->
                     <h:commandButton value="Show Selected Values"
                                      action="#{selfServiceSettingsBBean.printSelections}"
                                      onclick="prepareFormSubmit();"
