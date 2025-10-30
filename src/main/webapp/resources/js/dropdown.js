@@ -1,450 +1,419 @@
 /* ===========================================================
-   dropdown.js – FINAL (with server-backed chips restore)
-   - Adds attachChipRemoveListeners() and wires it in load/oncomplete
-   - Keeps original dynamic behaviors intact
+   dropdown.js — FIXED VERSION with proper Ajax data handling
 =========================================================== */
 
-/* ======= CONFIG ======= */
 const MAX_CHIPS = 20;
 const ABSOLUTE_MAX_CHIPS = 50;
 const COLLAPSE_THRESHOLD = 10;
 
-/* ======= HELPERS ======= */
+/* ---------- Helpers ---------- */
 function byId(id) { return document.getElementById(id); }
 function qSel(sel) { return document.querySelector(sel); }
 function qAll(sel) { return Array.from(document.querySelectorAll(sel)); }
 
-/* ======= EVENT & PICKUP DROPDOWNS ======= */
+/* ===========================================================
+   EVENT & PICKUP DROPDOWNS
+=========================================================== */
 function initializeCustomDropdowns() {
-  const dropdowns = document.querySelectorAll('.rich-dropdown:not([data-skip-init="true"])');
-  dropdowns.forEach(dropdown => {
-    const label = dropdown.querySelector('.rich-dropdown-label');
-    const labelText = dropdown.querySelector('.label-text');
-    const checkboxes = dropdown.querySelectorAll('.dropdown-list input[type="checkbox"]:not(.notification-checkbox)');
-    if (!label) return;
+  const dropdowns = qAll(".rich-dropdown");
+  dropdowns.forEach((dropdown) => {
+    const label = dropdown.querySelector(".rich-dropdown-label");
+    const labelText = dropdown.querySelector(".label-text");
+    const checkboxes = dropdown.querySelectorAll(".dropdown-list input[type='checkbox']");
 
-    label.addEventListener('click', e => {
+    if (!label || label._bound) return;
+    label._bound = true;
+
+    // Toggle dropdown open/close
+    label.addEventListener("click", (e) => {
       e.stopPropagation();
-      dropdowns.forEach(d => { if (d !== dropdown) d.classList.remove('open'); });
-      dropdown.classList.toggle('open');
+      dropdowns.forEach((d) => {
+        if (d !== dropdown) d.classList.remove("open");
+      });
+      dropdown.classList.toggle("open");
     });
 
-    checkboxes.forEach(cb => {
-      cb.addEventListener('change', () => updateDropdownChips(dropdown, checkboxes, labelText));
+    // Update label chips when selection changes
+    checkboxes.forEach((cb) => {
+      cb.addEventListener("change", () =>
+        updateDropdownChips(dropdown, checkboxes, labelText)
+      );
     });
 
     updateDropdownChips(dropdown, checkboxes, labelText);
   });
 
-  document.addEventListener('click', e => {
-    if (!e.target.closest('.rich-dropdown')) {
-      dropdowns.forEach(d => d.classList.remove('open'));
+  // Close dropdowns when clicking outside
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".rich-dropdown")) {
+      dropdowns.forEach((d) => d.classList.remove("open"));
     }
   });
 }
 
+/* Render selected chips inside dropdown label */
 function updateDropdownChips(dropdown, checkboxes, labelText) {
   const selected = Array.from(checkboxes)
-    .filter(c => c.checked)
-    .map(c => {
-      const text = c.nextElementSibling?.textContent.trim() || "";
-      return { label: c.dataset.label || text, checkbox: c };
-    });
+    .filter((c) => c.checked)
+    .map((c) => c.dataset.label || c.nextElementSibling?.textContent.trim());
 
-  if (selected.length === 0) {
+  // Update counter in "selected/total" format
+  const dropdownId = dropdown.getAttribute('data-dropdown-id');
+  if (dropdownId) {
+    const counter = byId(dropdownId + 'Counter');
+    if (counter) {
+      const totalCount = checkboxes.length;
+      const selectedCount = selected.length;
+      counter.textContent = `${selectedCount}/${totalCount}`;
+    }
+  }
+
+  if (!selected.length) {
     labelText.innerHTML = labelText.dataset.default;
     return;
   }
 
-  const total = selected.length;
-  let chipsHTML = '';
-  const visibleCount = Math.min(total, COLLAPSE_THRESHOLD);
+  const visibleCount = Math.min(selected.length, COLLAPSE_THRESHOLD);
+  let html = "";
 
-  for (let i = 0; i < visibleCount; i++) {
-    const item = selected[i];
-    chipsHTML += `
-      <span class="dropdown-chip" data-label="${escapeHtml(item.label)}">
-        ${escapeHtml(item.label)}
-        <button type="button" class="dropdown-chip-remove" onclick="removeDropdownChip(this, event)" title="Remove">×</button>
-      </span>
-    `;
+  selected.slice(0, visibleCount).forEach((label) => {
+    html += `<span class="dropdown-chip" data-label="${label}">
+      ${label}
+      <button type="button" class="dropdown-chip-remove" onclick="removeDropdownChip(this, event)">×</button>
+    </span>`;
+  });
+
+  if (selected.length > COLLAPSE_THRESHOLD) {
+    const remaining = selected.length - COLLAPSE_THRESHOLD;
+    html += `<span class="dropdown-chip dropdown-chip-more" onclick="expandDropdownChips(this, event)">+${remaining} more</span>`;
   }
 
-  if (total > COLLAPSE_THRESHOLD) {
-    const remaining = total - COLLAPSE_THRESHOLD;
-    chipsHTML += `
-      <span class="dropdown-chip dropdown-chip-more" onclick="expandDropdownChips(this, event)">
-        +${remaining} more
-      </span>
-    `;
-  }
-
-  labelText.innerHTML = chipsHTML;
+  labelText.innerHTML = html;
 }
 
+/* Remove a chip by clicking × inside label */
 function removeDropdownChip(button, event) {
   event.stopPropagation();
-  event.preventDefault();
-  const chip = button.closest('.dropdown-chip');
-  const dropdown = button.closest('.rich-dropdown');
+  const chip = button.closest(".dropdown-chip");
   const label = chip.dataset.label;
-  const checkboxes = dropdown.querySelectorAll('.dropdown-list input[type="checkbox"]');
-  checkboxes.forEach(cb => {
-    const cbLabel = cb.dataset.label || cb.nextElementSibling?.textContent.trim();
-    if (cbLabel === label) {
+  const dropdown = chip.closest(".rich-dropdown");
+  const checkboxes = dropdown.querySelectorAll(".dropdown-list input[type='checkbox']");
+  checkboxes.forEach((cb) => {
+    const lbl = cb.dataset.label || cb.nextElementSibling?.textContent.trim();
+    if (lbl === label) {
       cb.checked = false;
-      cb.dispatchEvent(new Event('change', { bubbles: true }));
+      cb.dispatchEvent(new Event("change", { bubbles: true }));
     }
   });
 }
 
-function expandDropdownChips(chip, event) {
+/* Expand collapsed chips (+N more) */
+function expandDropdownChips(button, event) {
   event.stopPropagation();
-  event.preventDefault();
-  const dropdown = chip.closest('.rich-dropdown');
-  const labelText = dropdown.querySelector('.label-text');
-  const checkboxes = dropdown.querySelectorAll('.dropdown-list input[type="checkbox"]');
+  const dropdown = button.closest(".rich-dropdown");
+  const labelText = dropdown.querySelector(".label-text");
+  const checkboxes = dropdown.querySelectorAll(".dropdown-list input[type='checkbox']");
   const selected = Array.from(checkboxes)
-    .filter(c => c.checked)
-    .map(c => c.dataset.label || c.nextElementSibling?.textContent.trim());
-  let chipsHTML = '';
-  selected.forEach(item => {
-    chipsHTML += `
-      <span class="dropdown-chip" data-label="${escapeHtml(item)}">
-        ${escapeHtml(item)}
-        <button type="button" class="dropdown-chip-remove" onclick="removeDropdownChip(this, event)" title="Remove">×</button>
-      </span>
-    `;
-  });
-  labelText.innerHTML = chipsHTML;
+    .filter((c) => c.checked)
+    .map((c) => c.dataset.label || c.nextElementSibling?.textContent.trim());
+  labelText.innerHTML = selected
+    .map(
+      (label) => `
+      <span class="dropdown-chip" data-label="${label}">
+        ${label}
+        <button type="button" class="dropdown-chip-remove" onclick="removeDropdownChip(this, event)">×</button>
+      </span>`
+    )
+    .join("");
 }
 
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-/* ✅ Safe selectAll for Event Codes & Pickup Types */
+/* Select/Clear all inside a dropdown */
 function selectAll(button, flag) {
-  let dropdown = button.closest('.rich-dropdown');
-  if (!dropdown) {
-    const maybeList = button.closest('.dropdown-list');
-    if (maybeList && maybeList.parentElement.classList.contains('rich-dropdown')) {
-      dropdown = maybeList.parentElement;
-    }
-  }
-  if (!dropdown) {
-    console.warn("⚠️ selectAll(): Could not find .rich-dropdown for", button);
-    return;
-  }
-
-  const checkboxes = dropdown.querySelectorAll('.dropdown-list input[type="checkbox"]:not(.notification-checkbox)');
-  const labelText = dropdown.querySelector('.label-text');
-  if (!checkboxes.length) return;
-
-  checkboxes.forEach(cb => {
+  const dropdown = button.closest(".rich-dropdown");
+  if (!dropdown) return;
+  const checkboxes = dropdown.querySelectorAll(".dropdown-list input[type='checkbox']");
+  const labelText = dropdown.querySelector(".label-text");
+  checkboxes.forEach((cb) => {
     cb.checked = flag;
-    cb.dispatchEvent(new Event('change', { bubbles: true }));
+    cb.dispatchEvent(new Event("change", { bubbles: true }));
   });
-
   updateDropdownChips(dropdown, checkboxes, labelText);
 }
 
-/* ======= FORM SUBMISSION ======= */
+/* ===========================================================
+   FORM SUBMISSION
+=========================================================== */
 function prepareFormSubmit() {
-  const eventDropdown = document.querySelector('.rich-dropdown:nth-of-type(1)');
-  const eventCheckboxes = eventDropdown ? eventDropdown.querySelectorAll('.dropdown-list input[type="checkbox"]:checked') : [];
-  const selectedEventCodes = Array.from(eventCheckboxes)
-    .map(cb => cb.dataset.label || cb.nextElementSibling?.textContent.trim())
-    .filter(Boolean);
+  const eventDropdown = qSel("[data-dropdown-id='eventCodes']");
+  const pickupDropdown = qSel("[data-dropdown-id='pickupType']");
+  
+  if (!eventDropdown || !pickupDropdown) {
+    console.error('[ERROR] Could not find dropdowns for form submission');
+    return true;
+  }
+  
+  const eventValues = Array.from(
+    eventDropdown.querySelectorAll(".dropdown-list input[type='checkbox']:checked")
+  ).map((cb) => cb.dataset.label || cb.nextElementSibling?.textContent.trim());
+  
+  const pickupValues = Array.from(
+    pickupDropdown.querySelectorAll(".dropdown-list input[type='checkbox']:checked")
+  ).map((cb) => cb.dataset.label || cb.nextElementSibling?.textContent.trim());
 
-  const pickupDropdown = document.querySelector('.rich-dropdown:nth-of-type(2)');
-  const pickupCheckboxes = pickupDropdown ? pickupDropdown.querySelectorAll('.dropdown-list input[type="checkbox"]:checked') : [];
-  const selectedPickupTypes = Array.from(pickupCheckboxes)
-    .map(cb => cb.dataset.label || cb.nextElementSibling?.textContent.trim())
-    .filter(Boolean);
+  console.log('[DEBUG] Event values:', eventValues);
+  console.log('[DEBUG] Pickup values:', pickupValues);
 
-  const eventCodesInput = document.getElementById('formId:selectedEventCodes');
-  const pickupTypesInput = document.getElementById('formId:selectedPickupTypes');
-  if (eventCodesInput) eventCodesInput.value = selectedEventCodes.join(',');
-  if (pickupTypesInput) pickupTypesInput.value = selectedPickupTypes.join(',');
+  byId("formId:selectedEventCodes").value = eventValues.join(",");
+  byId("formId:selectedPickupTypes").value = pickupValues.join(",");
+  
   return true;
 }
 
-/* ======= NOTIFICATION CHIPS + SUGGESTIONS ======= */
-function getChipWrapper() { return byId('formId:chipInputWrapper'); }
-function getChipsContainer() { return byId('chipsContainer'); }
-function getChipEditor() { return byId('formId:chipInput'); }
+/* ===========================================================
+   NOTIFICATION POPUP + CHIPS
+=========================================================== */
+function getChipEditor() { return byId("formId:chipInput"); }
+function getChipsContainer() { return byId("chipsContainer"); }
+function getNotifPopup() { return byId("notifPopup"); }
 
-/* ✅ Robust: find popup even if RichFaces re-renders it */
-function getNotifPopup(event) {
-  let popup = qSel('[id$="notificationSuggestion:list"]');
-  if (!popup && event && event.target) {
-    const possiblePopup = event.target.closest('[id*="notificationSuggestion"]');
-    if (possiblePopup && possiblePopup.querySelectorAll('input[type="checkbox"]').length) {
-      popup = possiblePopup;
+/* Position notification popup below the chip input field */
+function positionNotifPopup() {
+  const popup = getNotifPopup();
+  const chipInput = document.getElementById('formId:chipInputWrapper');
+  
+  if (popup && chipInput) {
+    const rect = chipInput.getBoundingClientRect();
+    const parentRect = chipInput.parentElement.getBoundingClientRect();
+    
+    popup.style.top = (rect.bottom - parentRect.top + 4) + 'px';
+    popup.style.left = (rect.left - parentRect.left) + 'px';
+  }
+}
+
+function openCustomNotifPopup() {
+  const popup = getNotifPopup();
+  
+  if (popup) {
+    positionNotifPopup();
+    popup.style.display = 'block';
+  }
+  
+  const ed = getChipEditor();
+  const q = ed ? ed.value : '';
+  
+  // Call the Ajax function if it exists
+  if (typeof fetchNotifSuggestions === 'function') {
+    try {
+      fetchNotifSuggestions(q);
+    } catch (err) {
+      console.warn('fetchNotifSuggestions() call failed', err);
+    }
+  } else {
+    console.warn('fetchNotifSuggestions() not defined — RichFaces script may not be loaded.');
+  }
+}
+
+
+/* Close popup if clicked outside */
+document.addEventListener("mousedown", (e) => {
+  const popup = getNotifPopup();
+  const input = getChipEditor();
+  if (!popup || !input) return;
+  if (!popup.contains(e.target) && !input.contains(e.target))
+    popup.style.display = "none";
+});
+
+/* Handle typing (live Ajax search) */
+let notifTimer = null;
+function handleChipTyping(event) {
+  const q = event.target.value || '';
+  clearTimeout(notifTimer);
+  notifTimer = setTimeout(() => {
+    if (typeof fetchNotifSuggestions === 'function') {
+      try {
+        fetchNotifSuggestions(q);
+      } catch (err) {
+        console.warn('fetchNotifSuggestions() call failed', err);
+      }
+    }
+  }, 150);
+}
+
+/* Handle backspace to remove chips */
+function handleChipBackspace(event) {
+  const input = event.target;
+  
+  // Only handle backspace when input is empty
+  if (event.key === 'Backspace' && input.value === '') {
+    const chips = qAll('.chip[data-label]');
+    if (chips.length > 0) {
+      // Remove the last chip
+      const lastChip = chips[chips.length - 1];
+      const label = lastChip.dataset.label;
+      removeChip(label);
+      event.preventDefault();
     }
   }
-  if (!popup) {
-    const allPopups = qAll('div[id*="notificationSuggestion"]');
-    popup = allPopups.find(p => p.querySelector('input[type="checkbox"]'));
-  }
-  return popup || null;
 }
 
-/* ======= CHIPS ======= */
-function focusChipEditor() { const ed = getChipEditor(); if (ed) { ed.focus(); openNotifPopup(); } }
-function openNotifPopup() { const popup = getNotifPopup(); if (popup) popup.style.display = 'block'; }
-function keepNotifPopupOpen() { setTimeout(() => { const ed = getChipEditor(); if (ed) { ed.focus(); openNotifPopup(); } }, 50); }
-function closeNotifPopupIfOutside(e) {
-  const wrap = getChipWrapper(), popup = getNotifPopup();
-  if (!wrap || !popup) return;
-  if (!wrap.contains(e.target) && !popup.contains(e.target)) popup.style.display = 'none';
-}
-
-function extractLabelFromCheckbox(checkbox) {
-  let label = '';
-  if (!checkbox) return '';
-  if (checkbox.nextSibling) {
-    if (checkbox.nextSibling.nodeType === Node.TEXT_NODE)
-      label = checkbox.nextSibling.textContent.trim();
-    else if (checkbox.nextSibling.textContent)
-      label = checkbox.nextSibling.textContent.trim();
-  }
-  if (!label && checkbox.parentElement) {
-    const walker = document.createTreeWalker(checkbox.parentElement, NodeFilter.SHOW_TEXT, null, false);
-    let node; const parts = [];
-    while (node = walker.nextNode()) {
-      const t = node.textContent.trim();
-      if (t) parts.push(t);
+/* ✅ FIXED: Callback now properly receives data from bean property */
+function onFetchNotifSuggestionsComplete(event, jsonData) {
+  console.log('[DEBUG] onFetchNotifSuggestionsComplete called');
+  console.log('[DEBUG] jsonData received:', jsonData);
+  
+  let results = [];
+  
+  try {
+    // The jsonData parameter contains the JSON string from the bean
+    if (jsonData && typeof jsonData === 'string') {
+      results = JSON.parse(jsonData);
+      console.log('[DEBUG] Successfully parsed JSON, results count:', results.length);
+    } else {
+      console.warn('[WARN] jsonData is empty or not a string');
     }
-    label = parts.join(' ').trim();
+  } catch (e) {
+    console.error('[ERROR] Failed to parse JSON:', e);
+    console.error('[ERROR] jsonData was:', jsonData);
   }
-  if (!label) {
-    const lab = checkbox.closest('label');
-    if (lab) label = lab.textContent.trim();
-  }
-  return label || '';
+  
+  renderNotifSuggestions(results);
 }
 
-/* ======= CHIP MANAGEMENT ======= */
-function chipExists(label) { return !!qSel(`.chip[data-label="${cssEscape(label)}"]`); }
-function cssEscape(s) { return (s || "").replace(/"/g, '\\"'); }
-function getChipCount() { return qAll('.chip[data-label]').length; }
-
-function addChip(label, { silent = false } = {}) {
-  if (!label) return;
-  const count = getChipCount();
-  if (count >= ABSOLUTE_MAX_CHIPS) {
-    toast(`Maximum ${ABSOLUTE_MAX_CHIPS} selections allowed`);
-    const cb = getListCheckboxNodeByLabel(label);
-    if (cb) cb.checked = false;
+/* Display suggestions */
+function renderNotifSuggestions(results) {
+  console.log('[DEBUG] renderNotifSuggestions called with', results.length, 'results');
+  
+  const popup = getNotifPopup();
+  const list = byId("notifList");
+  if (!popup || !list) {
+    console.error('[ERROR] Popup or list element not found');
     return;
   }
-  if (chipExists(label)) return;
-  const chips = getChipsContainer();
-  const chip = document.createElement('span');
-  chip.className = 'chip';
-  chip.setAttribute('data-label', label);
-  chip.innerHTML = `
-    <span class="chip-text" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
-    <button type="button" class="chip-remove" title="Remove">×</button>
-  `;
-  chip.querySelector('.chip-remove').addEventListener('click', () => onChipRemove(label));
-  chips.appendChild(chip);
-  updateChipCounterAndCollapse();
-  if (!silent) window.rfToggleNotif && rfToggleNotif(label, true);
-}
+  
+  list.innerHTML = "";
 
-function removeChip(label, { silent = false } = {}) {
-  const el = qSel(`.chip[data-label="${cssEscape(label)}"]`);
-  if (el) el.remove();
-  updateChipCounterAndCollapse();
-  if (!silent) window.rfToggleNotif && rfToggleNotif(label, false);
-}
-
-function onChipRemove(label) {
-  removeChip(label);
-  const cb = getListCheckboxNodeByLabel(label);
-  if (cb) {
-    cb.checked = false;
-    window.rfToggleNotif && rfToggleNotif(label, false);
-  }
-  keepNotifPopupOpen();
-}
-
-function updateChipCounterAndCollapse() {
-  const cntEl = byId('chipCounter');
-  const chips = qAll('.chip[data-label]');
-  const total = chips.length;
-  if (cntEl) cntEl.textContent = `${total}/${ABSOLUTE_MAX_CHIPS}`;
-  const container = getChipsContainer();
-  qAll('.chip-more').forEach(e => e.remove());
-  if (total > MAX_CHIPS) {
-    chips.forEach((c, idx) => c.style.display = (idx < MAX_CHIPS ? 'inline-flex' : 'none'));
-    const more = document.createElement('span');
-    more.className = 'chip chip-more';
-    more.textContent = `+${total - MAX_CHIPS} more`;
-    more.onclick = () => {
-      chips.forEach(c => c.style.display = 'inline-flex');
-      more.remove();
-    };
-    container.appendChild(more);
+  if (!results.length) {
+    list.innerHTML = `<div style="padding:8px;color:#6b7280;">No results found</div>`;
   } else {
-    chips.forEach(c => c.style.display = 'inline-flex');
+    results.forEach((msg) => {
+      const row = document.createElement("div");
+      row.className = "notif-row";
+      
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.className = "notification-checkbox";
+      cb.checked = !!qSel(`.chip[data-label="${msg}"]`);
+      cb.addEventListener("change", () => {
+        if (cb.checked) addChip(msg);
+        else removeChip(msg);
+      });
+      
+      const label = document.createElement("span");
+      label.textContent = msg;
+      label.style.marginLeft = "8px";
+      
+      row.appendChild(cb);
+      row.appendChild(label);
+      list.appendChild(row);
+    });
+  }
+
+  // Position and display popup
+  positionNotifPopup();
+  popup.style.display = "block";
+  
+  console.log('[DEBUG] Popup displayed with', results.length, 'suggestions');
+}
+
+/* Chips handling */
+function addChip(label) {
+  if (!label || chipExists(label)) return;
+  const chipsContainer = getChipsContainer();
+  const chip = document.createElement("span");
+  chip.className = "chip";
+  chip.dataset.label = label;
+  chip.innerHTML = `<span class="chip-text">${label}</span><button type="button" class="chip-remove">×</button>`;
+  chip.querySelector(".chip-remove").addEventListener("click", () => removeChip(label));
+  chipsContainer.appendChild(chip);
+  if (window.rfToggleNotif) rfToggleNotif(label, true);
+  updateChipCounter();
+  
+  // Reposition popup if it's visible (since input height may have changed)
+  const popup = getNotifPopup();
+  if (popup && popup.style.display === 'block') {
+    setTimeout(() => positionNotifPopup(), 10); // Small delay to let DOM update
   }
 }
 
-/* ======= NOTIFICATION CHECKBOX HELPERS ======= */
-function getListCheckboxNodeByLabel(label) {
-  const rows = qAll('[id$="notificationSuggestion:list"] input[type="checkbox"]');
-  for (const cb of rows) {
-    const extracted = extractLabelFromCheckbox(cb);
-    if (extracted === label) return cb;
+function removeChip(label) {
+  const chip = qSel(`.chip[data-label="${label}"]`);
+  if (chip) chip.remove();
+  if (window.rfToggleNotif) rfToggleNotif(label, false);
+  updateChipCounter();
+  
+  // Reposition popup if it's visible (since input height may have changed)
+  const popup = getNotifPopup();
+  if (popup && popup.style.display === 'block') {
+    setTimeout(() => positionNotifPopup(), 10); // Small delay to let DOM update
   }
-  return null;
 }
 
-function onSuggestionToggle(cb, label) {
-  if (cb.checked) addChip(label);
-  else removeChip(label);
-  keepNotifPopupOpen();
+function chipExists(label) {
+  return !!qSel(`.chip[data-label="${label}"]`);
 }
 
-/* ======= ✅ FIXED: SELECT ALL / CLEAR ALL ======= */
+function updateChipCounter() {
+  const counter = byId("chipCounter");
+  if (counter) counter.textContent = `${qAll(".chip[data-label]").length}/${ABSOLUTE_MAX_CHIPS}`;
+}
+
+/* Select All / Clear All in popup */
 function selectAllNotifications(event) {
-  if (event) { event.stopPropagation(); event.preventDefault(); }
-
-  const popup = getNotifPopup(event);
-  if (!popup) {
-    console.warn("⚠️ selectAllNotifications(): popup not found");
-    return false;
-  }
-
-  const checkboxes = Array.from(popup.querySelectorAll('input[type="checkbox"]'));
-  if (!checkboxes.length) return false;
-
-  const currentCount = getChipCount();
-  const toSelect = checkboxes.filter(cb => !cb.checked).length;
-  if (currentCount + toSelect > ABSOLUTE_MAX_CHIPS) {
-    toast(`Maximum ${ABSOLUTE_MAX_CHIPS} selections allowed`);
-    keepNotifPopupOpen();
-    return false;
-  }
-
-  let success = 0;
-  checkboxes.forEach(cb => {
-    if (!cb.checked) {
-      cb.checked = true;
-      const label = extractLabelFromCheckbox(cb);
-      cb.dispatchEvent(new Event('change', { bubbles: true }));
-      if (label) addChip(label, { silent: false });
-      success++;
-    }
+  event.stopPropagation();
+  const checkboxes = qAll("#notifList input[type='checkbox']");
+  checkboxes.forEach((cb) => {
+    cb.checked = true;
+    const label = cb.nextSibling?.textContent.trim();
+    addChip(label);
   });
-
-  console.log(`Select All toggled ${success} items`);
-  setTimeout(keepNotifPopupOpen, 120);
-  return false;
+  
+  // Reposition popup after all chips added (input height likely changed)
+  setTimeout(() => positionNotifPopup(), 50);
 }
 
 function clearAllNotifications(event) {
-  if (event) { event.stopPropagation(); event.preventDefault(); }
-
-  const popup = getNotifPopup(event);
-  if (!popup) {
-    console.warn("⚠️ clearAllNotifications(): popup not found");
-    return false;
-  }
-
-  const checkboxes = Array.from(popup.querySelectorAll('input[type="checkbox"]'));
-  let success = 0;
-  checkboxes.forEach(cb => {
-    if (cb.checked) {
-      cb.checked = false;
-      const label = extractLabelFromCheckbox(cb);
-      cb.dispatchEvent(new Event('change', { bubbles: true }));
-      if (label) removeChip(label, { silent: false });
-      success++;
-    }
+  event.stopPropagation();
+  const checkboxes = qAll("#notifList input[type='checkbox']");
+  checkboxes.forEach((cb) => {
+    cb.checked = false;
+    const label = cb.nextSibling?.textContent.trim();
+    removeChip(label);
   });
-
-  qAll('.chip[data-label]').forEach(chip => {
-    const lbl = chip.getAttribute('data-label');
-    if (lbl) removeChip(lbl, { silent: false });
-  });
-
-  console.log(`Clear All toggled off ${success} items`);
-  setTimeout(keepNotifPopupOpen, 120);
-  return false;
+  
+  // Reposition popup after all chips removed (input height likely changed)
+  setTimeout(() => positionNotifPopup(), 50);
 }
 
-/* ======= ATTACH LISTENERS FOR SERVER-RENDERED CHIPS ======= */
-function attachChipRemoveListeners() {
-  qAll('.chip .chip-remove').forEach(btn => {
-    if (btn._bound) return;
-    btn._bound = true;
-    btn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      const chip = btn.closest('.chip');
-      if (!chip) return;
-      const label = chip.getAttribute('data-label') || chip.dataset.label;
-      if (!label) return;
-      onChipRemove(label);
-    });
-  });
-}
-
-/* ======= TOAST ======= */
-function toast(msg) {
-  const el = document.createElement('div');
-  el.textContent = msg;
-  Object.assign(el.style, {
-    position: 'fixed', bottom: '16px', right: '16px',
-    padding: '10px 14px', background: '#111827', color: '#fff',
-    borderRadius: '8px', fontSize: '12px',
-    boxShadow: '0 6px 20px rgba(0,0,0,.25)', zIndex: 999999
-  });
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 2500);
-}
-
-/* ======= INIT ======= */
-window.addEventListener('load', () => {
+/* Initialize everything */
+window.addEventListener("load", () => {
   initializeCustomDropdowns();
-
-  // restore chips from any pre-checked suggestionbox checkboxes (if popup present)
-  const preChecked = qAll('[id$="notificationSuggestion:list"] input[type="checkbox"]:checked');
-  preChecked.forEach(cb => {
-    const label = extractLabelFromCheckbox(cb);
-    if (label) addChip(label, { silent: true });
+  updateChipCounter();
+  
+  // Initialize dropdown counters
+  const dropdowns = qAll('.rich-dropdown[data-dropdown-id]');
+  dropdowns.forEach((dropdown) => {
+    const checkboxes = dropdown.querySelectorAll('.dropdown-list input[type="checkbox"]');
+    const labelText = dropdown.querySelector('.label-text');
+    updateDropdownChips(dropdown, checkboxes, labelText);
   });
-
-  updateChipCounterAndCollapse();
-
-  // Attach handlers for server-rendered chips (ui:repeat generated)
-  attachChipRemoveListeners();
-
-  document.addEventListener('mousedown', closeNotifPopupIfOutside, { capture: true });
+  
+  console.log('[INFO] dropdown.js initialized');
 });
 
-if (window.A4J && A4J.AJAX) {
-  A4J.AJAX.AddListener({
-    onbeforedomupdate: () => { window._sb_keep_open = true; },
-    oncomplete: () => {
-      initializeCustomDropdowns();
-      const allChips = qAll('.chip[data-label]');
-      allChips.forEach(chip => {
-        const label = chip.getAttribute('data-label');
-        const cb = getListCheckboxNodeByLabel(label);
-        if (cb && !cb.checked) cb.checked = true;
-      });
-      keepNotifPopupOpen();
-      // ensure server-rendered chips have remove listeners wired
-      attachChipRemoveListeners();
-      updateChipCounterAndCollapse();
-      window._sb_keep_open = false;
-    }
-  });
-}
+/* Reposition notification popup on window resize if it's visible */
+window.addEventListener("resize", () => {
+  const popup = getNotifPopup();
+  if (popup && popup.style.display === 'block') {
+    positionNotifPopup();
+  }
+});
