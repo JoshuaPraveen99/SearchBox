@@ -1,419 +1,566 @@
 /* ===========================================================
-   dropdown.js — FIXED VERSION with proper Ajax data handling
+   dropdown.js — RF friendly custom dropdown + chips
+   Works: JSF 1.2 + RichFaces 3.3.3 + Chrome + Firefox + Edge
+   ES5 Compatible - No Arrow Functions
 =========================================================== */
 
-const MAX_CHIPS = 20;
-const ABSOLUTE_MAX_CHIPS = 50;
-const COLLAPSE_THRESHOLD = 10;
+/* -------- POLYFILL -------- */
+if (typeof CSS === "undefined" || typeof CSS.escape !== "function") {
+  window.CSS = window.CSS || {};
+  CSS.escape = function(value) {
+    return String(value).replace(/[^a-zA-Z0-9_\-]/g, "\\$&");
+  };
+}
 
-/* ---------- Helpers ---------- */
+/* -------- Utils -------- */
 function byId(id) { return document.getElementById(id); }
-function qSel(sel) { return document.querySelector(sel); }
-function qAll(sel) { return Array.from(document.querySelectorAll(sel)); }
+function qSel(s) { return document.querySelector(s); }
+function qAll(s) { return Array.prototype.slice.call(document.querySelectorAll(s)); }
 
-/* ===========================================================
-   EVENT & PICKUP DROPDOWNS
-=========================================================== */
-function initializeCustomDropdowns() {
-  const dropdowns = qAll(".rich-dropdown");
-  dropdowns.forEach((dropdown) => {
-    const label = dropdown.querySelector(".rich-dropdown-label");
-    const labelText = dropdown.querySelector(".label-text");
-    const checkboxes = dropdown.querySelectorAll(".dropdown-list input[type='checkbox']");
+/* -------- Retrieve Checkbox Label -------- */
+function getCheckboxLabel(checkbox) {
+  if (checkbox && checkbox.dataset && checkbox.dataset.label) return checkbox.dataset.label;
 
-    if (!label || label._bound) return;
-    label._bound = true;
-
-    // Toggle dropdown open/close
-    label.addEventListener("click", (e) => {
-      e.stopPropagation();
-      dropdowns.forEach((d) => {
-        if (d !== dropdown) d.classList.remove("open");
-      });
-      dropdown.classList.toggle("open");
-    });
-
-    // Update label chips when selection changes
-    checkboxes.forEach((cb) => {
-      cb.addEventListener("change", () =>
-        updateDropdownChips(dropdown, checkboxes, labelText)
-      );
-    });
-
-    updateDropdownChips(dropdown, checkboxes, labelText);
-  });
-
-  // Close dropdowns when clicking outside
-  document.addEventListener("click", (e) => {
-    if (!e.target.closest(".rich-dropdown")) {
-      dropdowns.forEach((d) => d.classList.remove("open"));
-    }
-  });
-}
-
-/* Render selected chips inside dropdown label */
-function updateDropdownChips(dropdown, checkboxes, labelText) {
-  const selected = Array.from(checkboxes)
-    .filter((c) => c.checked)
-    .map((c) => c.dataset.label || c.nextElementSibling?.textContent.trim());
-
-  // Update counter in "selected/total" format
-  const dropdownId = dropdown.getAttribute('data-dropdown-id');
-  if (dropdownId) {
-    const counter = byId(dropdownId + 'Counter');
-    if (counter) {
-      const totalCount = checkboxes.length;
-      const selectedCount = selected.length;
-      counter.textContent = `${selectedCount}/${totalCount}`;
-    }
+  if (checkbox && checkbox.nextElementSibling && checkbox.nextElementSibling.textContent) {
+    var t = checkbox.nextElementSibling.textContent.trim();
+    if (t) return t;
   }
 
-  if (!selected.length) {
-    labelText.innerHTML = labelText.dataset.default;
-    return;
+  var parentLbl = checkbox ? checkbox.closest("label") : null;
+  if (parentLbl) {
+    var sp = parentLbl.querySelector("span");
+    if (sp) return sp.textContent.trim();
+
+    var clone = parentLbl.cloneNode(true);
+    var input = clone.querySelector("input[type='checkbox']");
+    if (input) input.remove();
+    var txt = clone.textContent.trim();
+    if (txt) return txt;
   }
 
-  const visibleCount = Math.min(selected.length, COLLAPSE_THRESHOLD);
-  let html = "";
-
-  selected.slice(0, visibleCount).forEach((label) => {
-    html += `<span class="dropdown-chip" data-label="${label}">
-      ${label}
-      <button type="button" class="dropdown-chip-remove" onclick="removeDropdownChip(this, event)">×</button>
-    </span>`;
-  });
-
-  if (selected.length > COLLAPSE_THRESHOLD) {
-    const remaining = selected.length - COLLAPSE_THRESHOLD;
-    html += `<span class="dropdown-chip dropdown-chip-more" onclick="expandDropdownChips(this, event)">+${remaining} more</span>`;
+  if (checkbox && checkbox.nextSibling && checkbox.nextSibling.nodeType === 3) {
+    var txt2 = checkbox.nextSibling.textContent.trim();
+    if (txt2) return txt2;
   }
-
-  labelText.innerHTML = html;
+  return "";
 }
 
-/* Remove a chip by clicking × inside label */
-function removeDropdownChip(button, event) {
-  event.stopPropagation();
-  const chip = button.closest(".dropdown-chip");
-  const label = chip.dataset.label;
-  const dropdown = chip.closest(".rich-dropdown");
-  const checkboxes = dropdown.querySelectorAll(".dropdown-list input[type='checkbox']");
-  checkboxes.forEach((cb) => {
-    const lbl = cb.dataset.label || cb.nextElementSibling?.textContent.trim();
-    if (lbl === label) {
-      cb.checked = false;
-      cb.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-  });
-}
+/* ============== NOTIFICATIONS ============== */
 
-/* Expand collapsed chips (+N more) */
-function expandDropdownChips(button, event) {
-  event.stopPropagation();
-  const dropdown = button.closest(".rich-dropdown");
-  const labelText = dropdown.querySelector(".label-text");
-  const checkboxes = dropdown.querySelectorAll(".dropdown-list input[type='checkbox']");
-  const selected = Array.from(checkboxes)
-    .filter((c) => c.checked)
-    .map((c) => c.dataset.label || c.nextElementSibling?.textContent.trim());
-  labelText.innerHTML = selected
-    .map(
-      (label) => `
-      <span class="dropdown-chip" data-label="${label}">
-        ${label}
-        <button type="button" class="dropdown-chip-remove" onclick="removeDropdownChip(this, event)">×</button>
-      </span>`
-    )
-    .join("");
-}
+function getChipEditor(){ return byId("formId:chipInput"); }
+function getChipsContainer(){ return byId("chipsContainer"); }
+function getNotifPopup(){ return byId("notifPopup"); }
 
-/* Select/Clear all inside a dropdown */
-function selectAll(button, flag) {
-  const dropdown = button.closest(".rich-dropdown");
-  if (!dropdown) return;
-  const checkboxes = dropdown.querySelectorAll(".dropdown-list input[type='checkbox']");
-  const labelText = dropdown.querySelector(".label-text");
-  checkboxes.forEach((cb) => {
-    cb.checked = flag;
-    cb.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  updateDropdownChips(dropdown, checkboxes, labelText);
-}
+/* Source-of-truth (rebuilt from DOM when needed) */
+var notifLabels = [];
+var notifNodesByLabel = {};
+var notifVisibleCount = 0;
 
-/* ===========================================================
-   FORM SUBMISSION
-=========================================================== */
-function prepareFormSubmit() {
-  const eventDropdown = qSel("[data-dropdown-id='eventCodes']");
-  const pickupDropdown = qSel("[data-dropdown-id='pickupType']");
-  
-  if (!eventDropdown || !pickupDropdown) {
-    console.error('[ERROR] Could not find dropdowns for form submission');
-    return true;
-  }
-  
-  const eventValues = Array.from(
-    eventDropdown.querySelectorAll(".dropdown-list input[type='checkbox']:checked")
-  ).map((cb) => cb.dataset.label || cb.nextElementSibling?.textContent.trim());
-  
-  const pickupValues = Array.from(
-    pickupDropdown.querySelectorAll(".dropdown-list input[type='checkbox']:checked")
-  ).map((cb) => cb.dataset.label || cb.nextElementSibling?.textContent.trim());
-
-  console.log('[DEBUG] Event values:', eventValues);
-  console.log('[DEBUG] Pickup values:', pickupValues);
-
-  byId("formId:selectedEventCodes").value = eventValues.join(",");
-  byId("formId:selectedPickupTypes").value = pickupValues.join(",");
-  
-  return true;
-}
-
-/* ===========================================================
-   NOTIFICATION POPUP + CHIPS
-=========================================================== */
-function getChipEditor() { return byId("formId:chipInput"); }
-function getChipsContainer() { return byId("chipsContainer"); }
-function getNotifPopup() { return byId("notifPopup"); }
-
-/* Position notification popup below the chip input field */
-function positionNotifPopup() {
-  const popup = getNotifPopup();
-  const chipInput = document.getElementById('formId:chipInputWrapper');
-  
-  if (popup && chipInput) {
-    const rect = chipInput.getBoundingClientRect();
-    const parentRect = chipInput.parentElement.getBoundingClientRect();
-    
-    popup.style.top = (rect.bottom - parentRect.top + 4) + 'px';
-    popup.style.left = (rect.left - parentRect.left) + 'px';
+/* ----- Counters: Option D (hide all) ----- */
+function hideAllCounters() {
+  var ids = ["eventCodesCounter","pickupTypeCounter","chipCounter"];
+  for (var i=0;i<ids.length;i++){
+    var el = byId(ids[i]);
+    if (el) el.style.display = "none";
   }
 }
 
-function openCustomNotifPopup() {
-  const popup = getNotifPopup();
-  
-  if (popup) {
-    positionNotifPopup();
-    popup.style.display = 'block';
-  }
-  
-  const ed = getChipEditor();
-  const q = ed ? ed.value : '';
-  
-  // Call the Ajax function if it exists
-  if (typeof fetchNotifSuggestions === 'function') {
-    try {
-      fetchNotifSuggestions(q);
-    } catch (err) {
-      console.warn('fetchNotifSuggestions() call failed', err);
-    }
-  } else {
-    console.warn('fetchNotifSuggestions() not defined — RichFaces script may not be loaded.');
+/* ----- Robust helpers for notification model ----- */
+function hydrateNotifModelFromDOM() {
+  var container = getChipsContainer();
+  if (!container) return;
+  var domChips = container.querySelectorAll(".chip[data-label]");
+  notifLabels = [];
+  notifNodesByLabel = {};
+  for (var i=0;i<domChips.length;i++){
+    var node = domChips[i];
+    var label = node.dataset ? node.dataset.label : node.getAttribute("data-label");
+    if (!label) continue;
+    notifLabels.push(label);
+    notifNodesByLabel[label] = node;
   }
 }
 
+function ensureNotifModelFresh() {
+  var container = getChipsContainer();
+  if (!container) return;
+  var domCount = container.querySelectorAll(".chip[data-label]").length;
+  if (domCount !== notifLabels.length) hydrateNotifModelFromDOM();
+}
 
-/* Close popup if clicked outside */
-document.addEventListener("mousedown", (e) => {
-  const popup = getNotifPopup();
-  const input = getChipEditor();
-  if (!popup || !input) return;
-  if (!popup.contains(e.target) && !input.contains(e.target))
-    popup.style.display = "none";
+/* Position popup under input */
+function positionNotifPopup(){
+  var popup = getNotifPopup();
+  var wrapper = byId("formId:chipInputWrapper");
+  if (!popup || !wrapper) return;
+  var r = wrapper.getBoundingClientRect();
+  popup.style.top = (r.bottom + 4) + "px";
+  popup.style.left = r.left + "px";
+  popup.style.width = r.width + "px";
+}
+
+function openCustomNotifPopup(){
+  var p = getNotifPopup();
+  if (!p) return;
+  positionNotifPopup();
+  p.style.display = "block";
+}
+
+document.addEventListener("mousedown", function(e){
+  var p = getNotifPopup();
+  var input = getChipEditor();
+  if (!p || !input) return;
+  if (!p.contains(e.target) && !input.contains(e.target)) p.style.display = "none";
 });
 
-/* Handle typing (live Ajax search) */
-let notifTimer = null;
-function handleChipTyping(event) {
-  const q = event.target.value || '';
-  clearTimeout(notifTimer);
-  notifTimer = setTimeout(() => {
-    if (typeof fetchNotifSuggestions === 'function') {
-      try {
-        fetchNotifSuggestions(q);
-      } catch (err) {
-        console.warn('fetchNotifSuggestions() call failed', err);
-      }
-    }
-  }, 150);
-}
-
-/* Handle backspace to remove chips */
-function handleChipBackspace(event) {
-  const input = event.target;
-  
-  // Only handle backspace when input is empty
-  if (event.key === 'Backspace' && input.value === '') {
-    const chips = qAll('.chip[data-label]');
-    if (chips.length > 0) {
-      // Remove the last chip
-      const lastChip = chips[chips.length - 1];
-      const label = lastChip.dataset.label;
-      removeChip(label);
-      event.preventDefault();
+function handleChipBackspace(e){
+  var input = e.target;
+  if (e.key === "Backspace" && !input.value) {
+    ensureNotifModelFresh();
+    if (notifLabels.length) {
+      var last = notifLabels[notifLabels.length - 1];
+      removeChip(last);
+      e.preventDefault();
     }
   }
 }
 
-/* ✅ FIXED: Callback now properly receives data from bean property */
-function onFetchNotifSuggestionsComplete(event, jsonData) {
-  console.log('[DEBUG] onFetchNotifSuggestionsComplete called');
-  console.log('[DEBUG] jsonData received:', jsonData);
-  
-  let results = [];
-  
-  try {
-    // The jsonData parameter contains the JSON string from the bean
-    if (jsonData && typeof jsonData === 'string') {
-      results = JSON.parse(jsonData);
-      console.log('[DEBUG] Successfully parsed JSON, results count:', results.length);
-    } else {
-      console.warn('[WARN] jsonData is empty or not a string');
-    }
-  } catch (e) {
-    console.error('[ERROR] Failed to parse JSON:', e);
-    console.error('[ERROR] jsonData was:', jsonData);
-  }
-  
+function onFetchNotifSuggestionsComplete(event, jsonData){
+  var results = [];
+  try { results = typeof jsonData === "string" ? JSON.parse(jsonData) : jsonData; }
+  catch(e){ results = []; }
   renderNotifSuggestions(results);
 }
 
-/* Display suggestions */
-function renderNotifSuggestions(results) {
-  console.log('[DEBUG] renderNotifSuggestions called with', results.length, 'results');
-  
-  const popup = getNotifPopup();
-  const list = byId("notifList");
-  if (!popup || !list) {
-    console.error('[ERROR] Popup or list element not found');
-    return;
-  }
-  
-  list.innerHTML = "";
+function renderNotifSuggestions(results){
+  var popup = getNotifPopup();
+  var list = byId("notifList");
+  if (!popup || !list) return;
+  while (list.firstChild) list.removeChild(list.firstChild);
 
   if (!results.length) {
-    list.innerHTML = `<div style="padding:8px;color:#6b7280;">No results found</div>`;
+    var d = document.createElement("div");
+    d.textContent = "No results found";
+    d.style.padding="8px"; d.style.color="#6b7280";
+    list.appendChild(d);
   } else {
-    results.forEach((msg) => {
-      const row = document.createElement("div");
-      row.className = "notif-row";
-      
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.className = "notification-checkbox";
-      cb.checked = !!qSel(`.chip[data-label="${msg}"]`);
-      cb.addEventListener("change", () => {
-        if (cb.checked) addChip(msg);
-        else removeChip(msg);
-      });
-      
-      const label = document.createElement("span");
-      label.textContent = msg;
-      label.style.marginLeft = "8px";
-      
-      row.appendChild(cb);
-      row.appendChild(label);
+    ensureNotifModelFresh();
+    for (var i=0;i<results.length;i++){
+      var txt = results[i];
+
+      var row=document.createElement("div");
+      row.className="notif-row";
+
+      var cb=document.createElement("input");
+      cb.type="checkbox";
+      cb.checked = !!notifNodesByLabel[txt];
+      cb.dataset.label = txt;
+      cb.addEventListener("change", (function(value){
+        return function(){
+          if (this.checked) addChip(value); else removeChip(value);
+        };
+      })(txt));
+
+      var lbl=document.createElement("span");
+      lbl.textContent=txt;
+      lbl.style.marginLeft="8px";
+
+      row.appendChild(cb); row.appendChild(lbl);
       list.appendChild(row);
-    });
+    }
   }
-
-  // Position and display popup
   positionNotifPopup();
-  popup.style.display = "block";
-  
-  console.log('[DEBUG] Popup displayed with', results.length, 'suggestions');
+  popup.style.display="block";
 }
 
-/* Chips handling */
-function addChip(label) {
-  if (!label || chipExists(label)) return;
-  const chipsContainer = getChipsContainer();
-  const chip = document.createElement("span");
-  chip.className = "chip";
-  chip.dataset.label = label;
-  chip.innerHTML = `<span class="chip-text">${label}</span><button type="button" class="chip-remove">×</button>`;
-  chip.querySelector(".chip-remove").addEventListener("click", () => removeChip(label));
-  chipsContainer.appendChild(chip);
-  if (window.rfToggleNotif) rfToggleNotif(label, true);
-  updateChipCounter();
-  
-  // Reposition popup if it's visible (since input height may have changed)
-  const popup = getNotifPopup();
-  if (popup && popup.style.display === 'block') {
-    setTimeout(() => positionNotifPopup(), 10); // Small delay to let DOM update
+function selectAllNotifications(e){
+  if (e){ e.stopPropagation(); e.preventDefault(); }
+  var p=getNotifPopup(); if (!p) return;
+  var boxes = p.querySelectorAll(".notif-row input[type='checkbox']");
+  for (var i=0;i<boxes.length;i++){
+    var cb = boxes[i];
+    if (!cb.checked){ cb.checked = true; cb.dispatchEvent(new Event("change")); }
   }
 }
 
-function removeChip(label) {
-  const chip = qSel(`.chip[data-label="${label}"]`);
-  if (chip) chip.remove();
-  if (window.rfToggleNotif) rfToggleNotif(label, false);
-  updateChipCounter();
-  
-  // Reposition popup if it's visible (since input height may have changed)
-  const popup = getNotifPopup();
-  if (popup && popup.style.display === 'block') {
-    setTimeout(() => positionNotifPopup(), 10); // Small delay to let DOM update
+function clearAllNotifications(e){
+  if (e){ e.stopPropagation(); e.preventDefault(); }
+  var p=getNotifPopup(); if (!p) return;
+  var boxes = p.querySelectorAll(".notif-row input[type='checkbox']");
+  for (var i=0;i<boxes.length;i++){
+    var cb = boxes[i];
+    if (cb.checked){ cb.checked = false; cb.dispatchEvent(new Event("change")); }
   }
 }
 
-function chipExists(label) {
-  return !!qSel(`.chip[data-label="${label}"]`);
+/* ---- Chips ---- */
+
+var ABSOLUTE_MAX_CHIPS = 50;
+
+function createNotifChipNode(label){
+  var chip=document.createElement("span");
+  chip.className="chip"; chip.dataset.label=label;
+
+  var t=document.createElement("span");
+  t.className="chip-text"; t.title=label; t.textContent=label;
+
+  var x=document.createElement("button");
+  x.type="button"; x.className="chip-remove"; x.textContent="×";
+  x.onclick=function(e){ e.stopPropagation(); e.preventDefault(); removeChip(label); };
+
+  chip.appendChild(t); chip.appendChild(x);
+  return chip;
 }
 
-function updateChipCounter() {
-  const counter = byId("chipCounter");
-  if (counter) counter.textContent = `${qAll(".chip[data-label]").length}/${ABSOLUTE_MAX_CHIPS}`;
+function addChip(label){
+  if (!label) return;
+  ensureNotifModelFresh();
+  if (notifNodesByLabel[label]) return;
+  if (notifLabels.length>=ABSOLUTE_MAX_CHIPS) return;
+
+  var node = createNotifChipNode(label);
+  notifLabels.push(label);
+  notifNodesByLabel[label] = node;
+
+  var container = getChipsContainer();
+  if (container) container.appendChild(node);
+
+  if (typeof toggleNotif==="function") toggleNotif(label,true);
+
+  renderNotifChips(true);
+  positionNotifPopup();
 }
 
-/* Select All / Clear All in popup */
-function selectAllNotifications(event) {
-  event.stopPropagation();
-  const checkboxes = qAll("#notifList input[type='checkbox']");
-  checkboxes.forEach((cb) => {
-    cb.checked = true;
-    const label = cb.nextSibling?.textContent.trim();
-    addChip(label);
+function removeChip(label){
+  if (!label) return;
+  ensureNotifModelFresh();
+
+  var node = notifNodesByLabel[label];
+  if (!node) {
+    var container = getChipsContainer();
+    if (container) {
+      var sel = '.chip[data-label="' + CSS.escape(label) + '"]';
+      node = container.querySelector(sel);
+    }
+  }
+
+  if (node && node.parentNode) node.parentNode.removeChild(node);
+
+  if (notifNodesByLabel[label]) delete notifNodesByLabel[label];
+  var idx = notifLabels.indexOf(label);
+  if (idx > -1) notifLabels.splice(idx,1);
+
+  var p=getNotifPopup();
+  if (p){
+    var boxes = p.querySelectorAll('.notif-row input[type="checkbox"]');
+    for (var i=0;i<boxes.length;i++){
+      var cb = boxes[i];
+      if (cb.dataset.label===label && cb.checked) cb.checked=false;
+    }
+  }
+
+  if (typeof toggleNotif==="function") toggleNotif(label,false);
+
+  renderNotifChips(true);
+  positionNotifPopup();
+}
+
+/* ---- Chunk show + collapse ---- */
+function renderNotifChips(reset){
+  var container = getChipsContainer();
+  if (!container) return;
+
+  ensureNotifModelFresh();
+
+  var total = notifLabels.length;
+  var chunk = 5;
+  if (reset) notifVisibleCount = chunk;
+  if (!notifVisibleCount) notifVisibleCount = chunk;
+
+  var visible = Math.min(notifVisibleCount, total);
+
+  var oldControls = container.querySelectorAll(".chip-more");
+  for (var k=0;k<oldControls.length;k++){
+    var ctrl = oldControls[k];
+    if (ctrl.parentNode) ctrl.parentNode.removeChild(ctrl);
+  }
+
+  for (var i=0;i<total;i++){
+    var lbl = notifLabels[i];
+    var node = notifNodesByLabel[lbl] || createNotifChipNode(lbl);
+    notifNodesByLabel[lbl] = node;
+    container.appendChild(node); // move to correct order
+    node.style.display = (i < visible) ? "" : "none";
+  }
+
+  var hidden = total - visible;
+
+  if (hidden > 0){
+    var more=document.createElement("span");
+    more.className="chip chip-more";
+    more.textContent="+"+hidden+" more";
+    more.style.cursor = "pointer";
+    more.onclick=function(){
+      notifVisibleCount = Math.min(notifVisibleCount+chunk, total);
+      renderNotifChips(); // no reset
+      positionNotifPopup();
+    };
+    container.appendChild(more);
+
+    if (notifVisibleCount > chunk){
+      var collapse=document.createElement("span");
+      collapse.className="chip chip-more";
+      collapse.textContent="Collapse";
+      collapse.style.cursor = "pointer";
+      collapse.onclick=function(){
+        notifVisibleCount = chunk;
+        renderNotifChips(true);
+        positionNotifPopup();
+      };
+      container.appendChild(collapse);
+    }
+
+  } else if (total > chunk){
+    var collapse2=document.createElement("span");
+    collapse2.className="chip chip-more";
+    collapse2.textContent="Collapse";
+    collapse2.style.cursor = "pointer";
+    collapse2.onclick=function(){
+      notifVisibleCount = chunk;
+      renderNotifChips(true);
+      positionNotifPopup();
+    };
+    container.appendChild(collapse2);
+  }
+}
+
+/* --- Container-level event delegation for chip remove (bulletproof) --- */
+function attachDelegatedChipRemove(){
+  var container = getChipsContainer();
+  if (!container) return;
+  container.addEventListener("click", function(e){
+    var t = e.target || e.srcElement;
+    while (t && t !== container){
+      if (t.classList && t.classList.contains("chip-remove")){
+        var chip = t;
+        while (chip && (!chip.classList || !chip.classList.contains("chip"))){
+          chip = chip.parentNode;
+        }
+        if (chip){
+          var label = chip.dataset ? chip.dataset.label : chip.getAttribute("data-label");
+          if (label) removeChip(label);
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      t = t.parentNode;
+    }
   });
-  
-  // Reposition popup after all chips added (input height likely changed)
-  setTimeout(() => positionNotifPopup(), 50);
 }
 
-function clearAllNotifications(event) {
+/* Reposition popup on wrapper resize */
+setTimeout(function(){
+  var ed = getChipEditor();
+  if (ed && typeof ResizeObserver==="function") {
+    new ResizeObserver(function(){ positionNotifPopup(); })
+      .observe(ed.parentNode);
+  }
+},300);
+
+/* ============== MULTI-SELECT DROPDOWNS (EventCodes + PickupTypes) ============== */
+
+function removeDropdownChip(btn,event){
   event.stopPropagation();
-  const checkboxes = qAll("#notifList input[type='checkbox']");
-  checkboxes.forEach((cb) => {
-    cb.checked = false;
-    const label = cb.nextSibling?.textContent.trim();
-    removeChip(label);
-  });
-  
-  // Reposition popup after all chips removed (input height likely changed)
-  setTimeout(() => positionNotifPopup(), 50);
+  var chip=btn.closest(".dropdown-chip");
+  var label=chip.dataset.value;
+  var dd=chip.closest(".rich-dropdown");
+  var boxes=dd.querySelectorAll(".dropdown-list input[type='checkbox']");
+  var labelText=dd.querySelector(".label-text");
+
+  for (var i=0;i<boxes.length;i++){
+    var cb = boxes[i];
+    if (getCheckboxLabel(cb)===label){
+      cb.checked=false;
+      cb.dispatchEvent(new Event("change",{bubbles:true}));
+    }
+  }
+  updateDropdownChips(dd,boxes,labelText);
 }
 
-/* Initialize everything */
-window.addEventListener("load", () => {
+/* ---- Expand 5 at a time ---- */
+function expandDropdownChips(btn,event){
+  event.stopPropagation();
+  var dd=btn.closest(".rich-dropdown");
+  var labelText=dd.querySelector(".label-text");
+  var boxes=dd.querySelectorAll(".dropdown-list input[type='checkbox']");
+
+  var selected = [];
+  for (var i=0;i<boxes.length;i++){
+    var c = boxes[i];
+    if (c.checked){
+      var t = getCheckboxLabel(c);
+      if (t) selected.push(t);
+    }
+  }
+
+  var chunk = 5;
+  var current=parseInt(labelText.dataset.visibleCount||chunk,10);
+  current=Math.min(current+chunk, selected.length);
+  labelText.dataset.visibleCount=current;
+
+  renderDropdownChips(labelText, selected, current, chunk);
+}
+
+/* ---- Collapse dropdown chips ---- */
+function collapseDropdownChips(btn,event){
+  event.stopPropagation();
+  var dd=btn.closest(".rich-dropdown");
+  var labelText=dd.querySelector(".label-text");
+  labelText.dataset.visibleCount = 5;
+
+  var boxes=dd.querySelectorAll(".dropdown-list input[type='checkbox']");
+  updateDropdownChips(dd, boxes, labelText);
+}
+
+function renderDropdownChips(labelText, selected, visibleCount, chunk){
+  var html = [];
+  for (var i=0;i<Math.min(visibleCount, selected.length);i++){
+    var lbl = selected[i];
+    html.push(
+      '<span class="dropdown-chip" data-value="'+lbl+'" title="'+lbl+'">'+
+      '<span class="dropdown-chip-text">'+lbl+'</span>'+
+      '<button type="button" class="dropdown-chip-remove" onclick="removeDropdownChip(this,event)">×</button>'+
+      '</span>'
+    );
+  }
+  var remaining = selected.length - visibleCount;
+
+  if (remaining > 0){
+    html.push('<span class="dropdown-chip dropdown-chip-more" onclick="expandDropdownChips(this,event)" style="cursor:pointer;">+'+remaining+' more</span>');
+  }
+
+  if (visibleCount > chunk){
+    html.push('<span class="dropdown-chip dropdown-chip-more" onclick="collapseDropdownChips(this,event)" style="cursor:pointer;">Collapse</span>');
+  }
+
+  labelText.innerHTML = html.join("");
+}
+
+/* ---- Update dropdown chips ---- */
+function updateDropdownChips(dd,boxes,labelText){
+  var selected = [];
+  for (var i=0;i<boxes.length;i++){
+    var c = boxes[i];
+    if (c.checked){
+      var t = getCheckboxLabel(c);
+      if (t) selected.push(t);
+    }
+  }
+
+  if (!selected.length){
+    labelText.textContent = labelText.getAttribute("data-default") || "Select";
+    labelText.dataset.visibleCount = 5;
+    return;
+  }
+
+  var chunk = 5;
+  var visibleCount = parseInt(labelText.dataset.visibleCount||chunk,10);
+  visibleCount = Math.min(visibleCount, selected.length);
+
+  renderDropdownChips(labelText, selected, visibleCount, chunk);
+}
+
+function selectAll(btn,flag){
+  var dd=btn.closest(".rich-dropdown");
+  var boxes=dd.querySelectorAll(".dropdown-list input[type='checkbox']");
+  var labelText=dd.querySelector(".label-text");
+
+  for (var i=0;i<boxes.length;i++){
+    var cb = boxes[i];
+    cb.checked = flag;
+    cb.dispatchEvent(new Event("change",{bubbles:true}));
+  }
+  updateDropdownChips(dd,boxes,labelText);
+}
+
+/* ---- Init dropdowns ---- */
+function initializeCustomDropdowns(){
+  var dds=qAll(".rich-dropdown");
+  for (var di=0;di<dds.length;di++){
+    var dd = dds[di];
+    var label=dd.querySelector(".rich-dropdown-label");
+    if (!label || label._bound) continue;
+    label._bound=true;
+
+    label.addEventListener("click",function(e){
+      if (e.target.classList.contains("dropdown-chip-remove") ||
+          e.target.classList.contains("dropdown-chip-more")){
+        e.stopPropagation(); return;
+      }
+      e.stopPropagation();
+      var all=qAll(".rich-dropdown");
+      for (var j=0;j<all.length;j++){ if (all[j] !== dd) all[j].classList.remove("open"); }
+      dd.classList.toggle("open");
+    });
+
+    var boxes=dd.querySelectorAll(".dropdown-list input[type='checkbox']");
+    var labelText=dd.querySelector(".label-text");
+
+    for (var bi=0;bi<boxes.length;bi++){
+      var cb = boxes[bi];
+      var t = getCheckboxLabel(cb);
+      if (t) cb.dataset.label=t;
+      cb.addEventListener("change", (function(_dd,_boxes,_labelText){
+        return function(){ updateDropdownChips(_dd,_boxes,_labelText); };
+      })(dd,boxes,labelText));
+    }
+
+    updateDropdownChips(dd,boxes,labelText);
+  }
+
+  document.addEventListener("click",function(e){
+    if (!e.target.closest || !e.target.closest(".rich-dropdown")){
+      var all=qAll(".rich-dropdown");
+      for (var j=0;j<all.length;j++){ all[j].classList.remove("open"); }
+    }
+  });
+}
+
+/* ---- Prepare form submit ---- */
+function prepareFormSubmit(){
+  var map={
+    "eventCodes":"formId:selectedEventCodes",
+    "pickupType":"formId:selectedPickupTypes"
+  };
+
+  var ids=["eventCodes","pickupType"];
+  for (var ii=0;ii<ids.length;ii++){
+    var id = ids[ii];
+    var dd=qSel("[data-dropdown-id='"+id+"']");
+    if (!dd) continue;
+    var checked = dd.querySelectorAll(".dropdown-list input[type='checkbox']:checked");
+    var vals = [];
+    for (var ci=0;ci<checked.length;ci++){
+      var t = getCheckboxLabel(checked[ci]);
+      if (t) vals.push(t);
+    }
+    var hf=byId(map[id]);
+    if (hf) hf.value = vals.join(",");
+  }
+  return true;
+}
+
+/* ---- INIT ---- */
+window.addEventListener("load",function(){
+  hideAllCounters();                 // Option D
   initializeCustomDropdowns();
-  updateChipCounter();
-  
-  // Initialize dropdown counters
-  const dropdowns = qAll('.rich-dropdown[data-dropdown-id]');
-  dropdowns.forEach((dropdown) => {
-    const checkboxes = dropdown.querySelectorAll('.dropdown-list input[type="checkbox"]');
-    const labelText = dropdown.querySelector('.label-text');
-    updateDropdownChips(dropdown, checkboxes, labelText);
-  });
-  
-  console.log('[INFO] dropdown.js initialized');
+  hydrateNotifModelFromDOM();        // rebuild from any pre-rendered chips
+  attachDelegatedChipRemove();       // robust remove even after partial updates
+  renderNotifChips(true);
 });
 
-/* Reposition notification popup on window resize if it's visible */
-window.addEventListener("resize", () => {
-  const popup = getNotifPopup();
-  if (popup && popup.style.display === 'block') {
-    positionNotifPopup();
-  }
+window.addEventListener("resize",function(){
+  var p=getNotifPopup();
+  if (p && p.style.display==="block") positionNotifPopup();
 });
