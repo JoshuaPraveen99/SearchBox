@@ -1,0 +1,303 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<ui:composition template="/WEB-INF/templates/main.xhtml"
+    xmlns="http://www.w3.org/1999/xhtml"
+    xmlns:ui="http://java.sun.com/jsf/facelets"
+    xmlns:h="http://java.sun.com/jsf/html"
+    xmlns:f="http://java.sun.com/jsf/core"
+    xmlns:a4j="http://richfaces.org/a4j">
+
+<ui:define name="title">Search Box Example</ui:define>
+
+<ui:define name="head">
+<style>
+/* ===================== PAGE LAYOUT ===================== */
+.form-section { margin: 20px; font-family: Arial, sans-serif; }
+.field-row { display: flex; align-items: flex-start; gap: 20px; margin-bottom: 16px; }
+.field-label { font-weight: bold; font-size: 12px; margin-bottom: 4px; }
+.field-col { display: flex; flex-direction: column; position: relative; }
+
+/* ===================== CUSTOM DROPDOWNS ===================== */
+.rich-dropdown { position: relative; width: 180px; font-size: 12px; flex-shrink: 0; }
+.rich-dropdown-label {
+  border: 1px solid #d1d5db; background: #fff; border-radius: 6px;
+  padding: 4px 6px; cursor: pointer; display: flex; justify-content: space-between;
+  align-items: center; min-height: 30px; max-height: 80px; flex-wrap: wrap; gap: 4px;
+  overflow-y: auto; overflow-x: hidden;
+}
+.rich-dropdown-label::-webkit-scrollbar { width: 6px; }
+.rich-dropdown-label::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+.label-text { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; flex: 1; overflow: hidden; }
+.dropdown-list {
+  display: none; position: absolute; top: 100%; left: 0; width: 100%; background: #fff;
+  border: 1px solid #d1d5db; border-radius: 6px; z-index: 9999; max-height: 250px; overflow-y: auto; overflow-x: hidden;
+}
+.dropdown-list::-webkit-scrollbar { width: 8px; }
+.dropdown-list::-webkit-scrollbar-thumb { background: #9ca3af; border-radius: 4px; }
+.rich-dropdown.open .dropdown-list { display: block; }
+.dropdown-list label { display: flex; align-items: center; padding: 6px 10px; cursor: pointer; }
+.dropdown-list label:hover { background: #f3f4f6; }
+.dropdown-actions { display: flex; gap: 6px; padding: 6px; border-bottom: 1px solid #e5e7eb; background: #f9fafb; }
+.dropdown-actions button { flex: 1; font-size: 11px; padding: 4px 8px; }
+
+/* ===================== CHIPS ===================== */
+.dropdown-chip {
+  display: inline-flex; align-items: center; gap: 4px; background: #eef2ff; border: 1px solid #c7d2fe;
+  padding: 2px 6px; border-radius: 9999px; font-size: 10px; max-width: 120px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.dropdown-chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.dropdown-chip-remove {
+  border: none; background: transparent; cursor: pointer; font-weight: bold; font-size: 12px; line-height: 1; color: #374151;
+  flex-shrink: 0;
+}
+.dropdown-chip-remove:hover { color: #111827; transform: scale(1.1); }
+
+/* Counter for dropdowns */
+.dropdown-counter { font-size: 10px; color: #6b7280; margin-right: 6px; white-space: nowrap; flex-shrink: 0; }
+
+/* ===================== CHIP INPUT ===================== */
+.chip-input {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 32px;
+  padding: 4px 8px; width: 380px; border: 1px solid #d1d5db; border-radius: 8px; cursor: text; background: #fff;
+}
+.chips-container { display: flex; flex-wrap: wrap; gap: 6px; max-height: 80px; overflow-y: auto; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  padding: 4px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  max-width: 200px;
+}
+.chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.chip-remove {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.chip-remove:hover { color: #111827; transform: scale(1.1); }
+.chip-counter { font-size: 10px; color: #6b7280; margin-right: 4px; }
+.chip-editor-input { border: none; outline: none; min-width: 80px; font-size: 11px; padding: 4px; flex: 1; }
+
+/* ===================== CUSTOM NOTIFICATION POPUP ===================== */
+
+.notif-popup {
+  position: fixed; /* Changed from absolute to fixed */
+  z-index: 99999; 
+  background: #fff; 
+  border: 1px solid #d1d5db;
+  border-radius: 8px; 
+  box-shadow: 0 6px 18px rgba(0,0,0,.15); 
+  max-height: 250px; 
+  overflow-y: auto; 
+  display: none;
+}
+.notif-popup::-webkit-scrollbar { width: 8px; }
+.notif-popup::-webkit-scrollbar-thumb { background: #9ca3af; border-radius: 4px; }
+.notif-row { display: flex; align-items: center; padding: 6px 10px; cursor: pointer; }
+.notif-row:hover { background: #f3f4f6; }
+
+/* ===================== BUTTONS ===================== */
+button { font-size: 12px; background: #3b82f6; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+button:hover { background: #2563eb; }
+button:disabled { background: #93c5fd; cursor: not-allowed; }
+
+.hidden {
+  display: none !important;
+}
+
+/* Flex container for notification input + button */
+.notif-flex {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+/* Button styling next to chips input */
+.notif-btn {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 11px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.notif-btn:hover {
+  background: #2563eb;
+}
+
+
+</style>
+
+<script type="text/javascript" src="#{facesContext.externalContext.requestContextPath}/resources/js/dropdown.js"></script>
+</ui:define>
+
+<ui:define name="content">
+<h:form id="formId">
+  <div class="form-section">
+
+    <div class="field-row">
+      <!-- ================= EVENT CODES ================= -->
+      <div class="field-col">
+        <span class="field-label">Event Codes:</span>
+        <div class="rich-dropdown" data-dropdown-id="eventCodes">
+          <div class="rich-dropdown-label">
+            <span class="dropdown-counter" id="eventCodesCounter">0/30</span>
+            <span class="label-text" data-default="Select Event Codes">Select Event Codes</span>
+            <span>▼</span>
+          </div>
+          <div class="dropdown-list">
+            <div class="dropdown-actions">
+              <button type="button" onclick="selectAll(this, true)">Select All</button>
+              <button type="button" onclick="selectAll(this, false)">Clear All</button>
+            </div>
+            <ui:repeat value="#{selfServiceSettingsBBean.eventCodesList}" var="code">
+              <label title="#{selfServiceSettingsBBean.eventCodeTooltips[code]}">
+                <h:selectBooleanCheckbox value="#{selfServiceSettingsBBean.selectedEventCodesMap[code]}" />
+                <h:outputText value="#{code}" style="margin-left:5px;" />
+              </label>
+            </ui:repeat>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= PICKUP TYPE ================= -->
+      <div class="field-col">
+        <span class="field-label">Pickup Type:</span>
+        <div class="rich-dropdown" data-dropdown-id="pickupType">
+          <div class="rich-dropdown-label">
+            <span class="dropdown-counter" id="pickupTypeCounter">0/30</span>
+            <span class="label-text" data-default="Select Pickup Type">Select Pickup Type</span>
+            <span>▼</span>
+          </div>
+          <div class="dropdown-list">
+            <div class="dropdown-actions">
+              <button type="button" onclick="selectAll(this, true)">Select All</button>
+              <button type="button" onclick="selectAll(this, false)">Clear All</button>
+            </div>
+            <ui:repeat value="#{selfServiceSettingsBBean.pickupTypeList}" var="type">
+              <label>
+                <h:selectBooleanCheckbox value="#{selfServiceSettingsBBean.selectedPickupTypeMap[type]}" />
+                <h:outputText value="#{type}" style="margin-left:5px;" />
+              </label>
+            </ui:repeat>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= NOTIFICATION MESSAGES ================= -->
+<!-- ================= NOTIFICATION MESSAGES ================= -->
+<div class="field-col">
+    <div class="field-label">Notification Messages:</div>
+
+    <!-- Flex wrapper to align input + button -->
+    <div class="notif-flex">
+
+        <!-- Chips + Input Container -->
+        <h:panelGroup id="chipInputWrapper"
+                      layout="block"
+                      styleClass="chip-input"
+                      onclick="getChipEditor().focus()">
+
+            <!-- Chip Counter -->
+            <span id="chipCounter" class="chip-counter"></span>
+
+            <!-- Chips Container -->
+            <span id="chipsContainer" class="chips-container" data-visible-chips="4">
+                <ui:repeat value="#{selfServiceSettingsBBean.selectedNotificationList}" var="msg">
+                    <span class="chip" data-label="#{msg}">
+                        <span class="chip-text" title="#{msg}">#{msg}</span>
+                        <button type="button" class="chip-remove"
+                                onclick="event.stopPropagation(); event.preventDefault(); removeChip('#{msg}')">×</button>
+                    </span>
+                </ui:repeat>
+            </span>
+
+            <!-- Notification Input -->
+            <h:inputText id="chipInput"
+                         value="#{selfServiceSettingsBBean.chipQuery}"
+                         styleClass="chip-editor-input"
+                         autocomplete="off"
+                         onfocus="openCustomNotifPopup()"
+                         onkeydown="handleChipBackspace(event)"
+                         onkeyup="var hid = document.querySelector('[id$=chipHidden]'); if(hid){ hid.value = this.value; }" />
+        </h:panelGroup>
+
+        <!-- ✅ Button moved here -->
+        <h:commandButton value="Show Selected Values"
+                         action="#{selfServiceSettingsBBean.printSelections}"
+                         onclick="prepareFormSubmit();"
+                         styleClass="notif-btn" />
+    </div>
+
+    <!-- Hidden -->
+    <h:inputHidden id="chipHidden" value="#{selfServiceSettingsBBean.chipQuery}" />
+
+    <!-- Live search trigger -->
+    <a4j:support event="onkeyup"
+                 action="#{selfServiceSettingsBBean.fetchNotificationSuggestions}"
+                 reRender="notifListWrapper"
+                 oncomplete="onFetchNotifSuggestionsComplete(event, #{requestScope.notifJson})"
+                 ajaxSingle="true"
+                 requestDelay="120"
+                 limitToList="true" />
+
+    <!-- Popup -->
+    <div id="notifPopup" class="notif-popup">
+        <div class="dropdown-actions">
+            <button type="button" onclick="selectAllNotifications(event)">Select All</button>
+            <button type="button" onclick="clearAllNotifications(event)">Clear All</button>
+        </div>
+
+        <a4j:outputPanel id="notifListWrapper">
+            <div id="notifList"></div>
+        </a4j:outputPanel>
+    </div>
+</div>
+    
+    </div>
+
+    <h:inputHidden id="selectedEventCodes" value="#{selfServiceSettingsBBean.selectedEventCodesString}" />
+    <h:inputHidden id="selectedPickupTypes" value="#{selfServiceSettingsBBean.selectedPickupTypesString}" />
+
+    <a4j:jsFunction name="toggleNotif"
+                    action="#{selfServiceSettingsBBean.toggleNotification}"
+                    limitToList="true"
+                    ajaxSingle="true"
+                    immediate="true">
+      <a4j:actionparam name="label" assignTo="#{selfServiceSettingsBBean.toggleLabel}" />
+      <a4j:actionparam name="checked" assignTo="#{selfServiceSettingsBBean.toggleChecked}" />
+    </a4j:jsFunction>
+
+
+ 
+    <h:panelGroup rendered="#{not empty selfServiceSettingsBBean.selectedSummary}">
+      <h:outputText value="#{selfServiceSettingsBBean.selectedSummary}" escape="false" />
+    </h:panelGroup>
+  </div>
+</h:form>
+</ui:define>
+</ui:composition>
