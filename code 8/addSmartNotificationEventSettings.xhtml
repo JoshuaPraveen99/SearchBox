@@ -1,0 +1,726 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" 
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="http://java.sun.com/jsf/html"
+      xmlns:f="http://java.sun.com/jsf/core"
+      xmlns:ui="http://java.sun.com/jsf/facelets"
+      xmlns:a4j="http://richfaces.org/a4j"
+      xmlns:rich="http://richfaces.org/rich">
+
+<h:head>
+    <title>Add/Edit Smart Notification Event Configuration</title>
+    <style>
+        /* Dropdown and UI Styles */
+        .field-row { margin-bottom: 15px; }
+        .field-col { display: inline-block; margin-right: 20px; vertical-align: top; }
+        .field-label { font-weight: bold; display: block; margin-bottom: 5px; }
+        .rich-dropdown { position: relative; min-width: 200px; cursor: pointer; border: 1px solid #ccc; padding: 8px; background: white; }
+        .rich-dropdown-label { display: flex; align-items: center; justify-content: space-between; }
+        .dropdown-counter { background: #007bff; color: white; padding: 2px 8px; border-radius: 3px; margin-right: 8px; font-size: 11px; }
+        .label-text { flex: 1; }
+        .dropdown-arrow { border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 5px solid #666; }
+        .dropdown-list { display: none; position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ccc; max-height: 300px; overflow-y: auto; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .dropdown-list.open { display: block; }
+        .dropdown-actions { padding: 8px; border-bottom: 1px solid #eee; }
+        .dropdown-actions button { margin-right: 5px; padding: 4px 8px; cursor: pointer; }
+        .chip { display: inline-block; background: #e3f2fd; border: 1px solid #2196f3; padding: 4px 8px; margin: 2px; border-radius: 3px; }
+        .chip-text { margin-right: 5px; }
+        .chip button { background: none; border: none; color: #2196f3; cursor: pointer; font-weight: bold; }
+        .chips-container { border: 1px solid #ccc; padding: 8px; min-height: 40px; background: white; }
+        .chip-editor-input { border: none; outline: none; flex: 1; min-width: 150px; }
+        .chip-input { display: flex; align-items: center; flex-wrap: wrap; }
+        .notif-flex { display: flex; align-items: center; gap: 10px; }
+        .chip-counter { background: #007bff; color: white; padding: 2px 8px; border-radius: 3px; font-size: 11px; }
+        .notif-popup { display: none; position: absolute; background: white; border: 1px solid #ccc; max-height: 200px; overflow-y: auto; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .notif-popup.open { display: block; }
+        .button_link_sm { padding: 4px 8px; font-size: 12px; height: 40px; }
+        .compact-text { font-size: 12px; }
+        .event-type-select { padding: 8px; border: 1px solid #ccc; min-width: 200px; }
+        .col-tooltip-cursor { cursor: pointer; }
+        .tabletext_blk_on_wht { color: #000; }
+        .tabletext_blk_on_grey { color: #333; background: #f5f5f5; }
+        .page_content_panel { padding: 20px; }
+    </style>
+    
+    <script type="text/javascript">
+        //<![CDATA[
+        
+        // Global state tracking
+        var activeRequests = {
+            eventType: false,
+            notification: false,
+            search: false
+        };
+        
+        // Initialize custom dropdowns
+        function initializeCustomDropdowns() {
+            console.log("Initializing custom dropdowns");
+            
+            var dropdowns = document.querySelectorAll('.rich-dropdown');
+            dropdowns.forEach(function(dropdown) {
+                var label = dropdown.querySelector('.rich-dropdown-label');
+                var list = dropdown.querySelector('.dropdown-list');
+                
+                if (label && list) {
+                    label.onclick = function(e) {
+                        e.stopPropagation();
+                        toggleDropdown(dropdown);
+                    };
+                }
+            });
+            
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('.rich-dropdown')) {
+                    closeAllDropdowns();
+                }
+            });
+            
+            console.log("Custom dropdowns initialized");
+        }
+        
+        function toggleDropdown(dropdown) {
+            var list = dropdown.querySelector('.dropdown-list');
+            var isOpen = list.classList.contains('open');
+            
+            closeAllDropdowns();
+            
+            if (!isOpen) {
+                list.classList.add('open');
+            }
+        }
+        
+        function closeAllDropdowns() {
+            var allLists = document.querySelectorAll('.dropdown-list');
+            allLists.forEach(function(list) {
+                list.classList.remove('open');
+            });
+        }
+        
+        function closeDropdown(dropdown) {
+            var list = dropdown.querySelector('.dropdown-list');
+            if (list) {
+                list.classList.remove('open');
+            }
+        }
+        
+        // Select All functionality
+        function selectAll(button, isEventCode) {
+            console.log("Select All clicked");
+            var dropdown = button.closest('.rich-dropdown');
+            var checkboxes = dropdown.querySelectorAll('input[type="checkbox"]');
+            
+            checkboxes.forEach(function(cb) {
+                if (!cb.checked) {
+                    cb.checked = true;
+                    if (cb.onchange) cb.onchange();
+                }
+            });
+        }
+        
+        // Clear All functionality
+        function clearAll(button, isEventCode) {
+            console.log("Clear All clicked");
+            var dropdown = button.closest('.rich-dropdown');
+            var checkboxes = dropdown.querySelectorAll('input[type="checkbox"]');
+            
+            checkboxes.forEach(function(cb) {
+                if (cb.checked) {
+                    cb.checked = false;
+                    if (cb.onchange) cb.onchange();
+                }
+            });
+        }
+        
+        // Update counter display
+        function updateCounter(counterId, selected, total) {
+            var counter = document.getElementById(counterId);
+            if (counter) {
+                counter.textContent = selected + '/' + total;
+            }
+        }
+        
+        // Hide all counters
+        function hideAllCounters() {
+            console.log("Hiding all counters");
+            var counters = document.querySelectorAll('.dropdown-counter');
+            counters.forEach(function(counter) {
+                counter.textContent = '0/0';
+            });
+        }
+        
+        // Event Type Change Complete Callback
+        function onEventTypeChangeComplete() {
+            console.log("=== Event Type Change Complete ===");
+            activeRequests.eventType = false;
+            
+            initializeCustomDropdowns();
+            hideAllCounters();
+            clearEventCodesDropdown();
+            clearPickupTypeDropdown();
+            clearNotificationInput();
+            
+            console.log("Event type change processing complete");
+        }
+        
+        function clearEventCodesDropdown() {
+            var checkboxes = document.querySelectorAll('[data-dropdown-id="eventCodes"] input[type="checkbox"]');
+            checkboxes.forEach(function(cb) {
+                cb.checked = false;
+            });
+            updateCounter('eventCodesCounter', 0, checkboxes.length);
+        }
+        
+        function clearPickupTypeDropdown() {
+            var checkboxes = document.querySelectorAll('[data-dropdown-id="pickupType"] input[type="checkbox"]');
+            checkboxes.forEach(function(cb) {
+                cb.checked = false;
+            });
+            updateCounter('pickupTypeCounter', 0, checkboxes.length);
+        }
+        
+        function clearNotificationInput() {
+            var chipInput = document.getElementById('chipInput');
+            if (chipInput) {
+                chipInput.value = '';
+            }
+            
+            var hiddenInput = document.querySelector('[id$="chipHidden"]');
+            if (hiddenInput) {
+                hiddenInput.value = '';
+            }
+            
+            var chipsContainer = document.getElementById('chipsContainer');
+            if (chipsContainer) {
+                chipsContainer.innerHTML = '';
+            }
+            
+            updateCounter('chipCounter', 0, 4);
+        }
+        
+        // Notification Functions
+        function openCustomNotifPopup() {
+            console.log("Opening notification popup");
+            var popup = document.getElementById('notifPopup');
+            if (popup) {
+                popup.classList.add('open');
+            }
+        }
+        
+        function closeCustomNotifPopup() {
+            var popup = document.getElementById('notifPopup');
+            if (popup) {
+                popup.classList.remove('open');
+            }
+        }
+        
+        function handleChipBackspace(event) {
+            if (event.key === 'Backspace' || event.keyCode === 8) {
+                var input = event.target;
+                if (input.value === '' || input.value.length === 0) {
+                    removeLastChip();
+                }
+            }
+        }
+        
+        function removeLastChip() {
+            var chipsContainer = document.getElementById('chipsContainer');
+            if (chipsContainer) {
+                var chips = chipsContainer.querySelectorAll('.chip');
+                if (chips.length > 0) {
+                    var lastChip = chips[chips.length - 1];
+                    lastChip.remove();
+                    updateChipCounter();
+                }
+            }
+        }
+        
+        function removeChip(chipElement) {
+            if (chipElement) {
+                chipElement.remove();
+                updateChipCounter();
+                updateSelectedNotificationsHidden();
+            }
+        }
+        
+        function addChip(message) {
+            var chipsContainer = document.getElementById('chipsContainer');
+            if (!chipsContainer) return;
+            
+            var chipCount = chipsContainer.querySelectorAll('.chip').length;
+            if (chipCount >= 4) {
+                alert('Maximum 4 notifications allowed');
+                return;
+            }
+            
+            var chip = document.createElement('span');
+            chip.className = 'chip';
+            chip.setAttribute('data-label', message);
+            chip.innerHTML = '<span class="chip-text" title="' + message + '">' + message + '</span>' +
+                           '<button type="button" onclick="removeChip(this.parentElement)">×</button>';
+            
+            chipsContainer.appendChild(chip);
+            updateChipCounter();
+            
+            var chipInput = document.getElementById('chipInput');
+            if (chipInput) {
+                chipInput.value = '';
+            }
+            
+            updateSelectedNotificationsHidden();
+        }
+        
+        function updateChipCounter() {
+            var chipsContainer = document.getElementById('chipsContainer');
+            if (chipsContainer) {
+                var chipCount = chipsContainer.querySelectorAll('.chip').length;
+                updateCounter('chipCounter', chipCount, 4);
+            }
+        }
+        
+        function updateSelectedNotificationsHidden() {
+            var chipsContainer = document.getElementById('chipsContainer');
+            var hiddenField = document.getElementById('selectedNotifications');
+            
+            if (chipsContainer && hiddenField) {
+                var chips = chipsContainer.querySelectorAll('.chip');
+                var values = [];
+                chips.forEach(function(chip) {
+                    values.push(chip.getAttribute('data-label'));
+                });
+                hiddenField.value = values.join(',');
+            }
+        }
+        
+        function selectAllNotifications(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            
+            var popup = document.getElementById('notifPopup');
+            if (!popup) return;
+            
+            var items = popup.querySelectorAll('.notif-item');
+            items.forEach(function(item) {
+                var message = item.textContent || item.innerText;
+                addChip(message.trim());
+            });
+            
+            closeCustomNotifPopup();
+        }
+        
+        function clearAllNotifications(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            
+            var chipsContainer = document.getElementById('chipsContainer');
+            if (chipsContainer) {
+                chipsContainer.innerHTML = '';
+                updateChipCounter();
+                updateSelectedNotificationsHidden();
+            }
+            
+            closeCustomNotifPopup();
+        }
+        
+        function onFetchNotifSuggestionsComplete(event, notifJson) {
+            console.log("Notification suggestions fetched");
+            activeRequests.notification = false;
+            
+            if (notifJson && notifJson.length > 0) {
+                displayNotificationSuggestions(notifJson);
+            }
+        }
+        
+        function displayNotificationSuggestions(notifJson) {
+            var popup = document.getElementById('notifList');
+            if (!popup) return;
+            
+            popup.innerHTML = '';
+            
+            if (Array.isArray(notifJson)) {
+                notifJson.forEach(function(notif) {
+                    var item = document.createElement('div');
+                    item.className = 'notif-item';
+                    item.textContent = notif.message || notif;
+                    item.style.padding = '8px';
+                    item.style.cursor = 'pointer';
+                    item.style.borderBottom = '1px solid #eee';
+                    
+                    item.onclick = function() {
+                        addChip(notif.message || notif);
+                        closeCustomNotifPopup();
+                    };
+                    
+                    item.onmouseover = function() {
+                        this.style.background = '#f0f0f0';
+                    };
+                    
+                    item.onmouseout = function() {
+                        this.style.background = 'white';
+                    };
+                    
+                    popup.appendChild(item);
+                });
+            }
+        }
+        
+        function getChipEditor() {
+            return document.getElementById('chipInputWrapper');
+        }
+        
+        function prepareFormSubmit() {
+            console.log("Preparing form submit");
+            
+            if (activeRequests.eventType) {
+                console.warn("Event type change in progress, deferring");
+                setTimeout(prepareFormSubmit, 200);
+                return false;
+            }
+            
+            activeRequests.search = true;
+            return true;
+        }
+        
+        function onNotificationSearchComplete() {
+            console.log("Notification search complete");
+            activeRequests.search = false;
+        }
+        
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("Page loaded, initializing...");
+            initializeCustomDropdowns();
+            hideAllCounters();
+        });
+        
+        //]]>
+    </script>
+</h:head>
+
+<h:body>
+    <rich:panel styleClass="page_content_panel">
+        <f:facet name="header">
+            <h:outputText value="Add Event Configuration" />
+        </f:facet>
+        
+        <h:form id="addEventConfigForm">
+            
+            <!-- AJAX Queues -->
+            <a4j:queue name="eventTypeQueue" 
+                       requestDelay="50"
+                       size="1"
+                       ignoreDupResponses="true" />
+            
+            <a4j:queue name="notificationQueue" 
+                       requestDelay="120"
+                       size="1"
+                       ignoreDupResponses="true" />
+            
+            <a4j:region id="tableRegion">
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 1px solid #d1d5db;">
+                    
+                    <!-- ROW 1: Selected Stores -->
+                    <tr>
+                        <td style="width: 200px; padding: 10px; font-weight: bold; border: 1px solid #d1d5db; background: #f9fafb;">
+                            Selected Stores:
+                        </td>
+                        <td style="padding: 10px; border: 1px solid #d1d5db;">
+                            <h:outputText value="#{selfServiceSettingsBBean.selectedStoresFilterString}" 
+                                         styleClass="compact-text" />
+                        </td>
+                    </tr>
+                    
+                    <!-- ROW 2: Event Type (FIXED) -->
+                    <tr>
+                        <td style="width: 200px; padding: 10px; font-weight: bold; border: 1px solid #d1d5db; background: #f9fafb;">
+                            Event Type:
+                        </td>
+                        <td style="padding: 10px; border: 1px solid #d1d5db;">
+                            <h:selectOneMenu id="eventTypeSelector"
+                                           value="#{selfServiceSettingsBBean.selectedEventType}"
+                                           styleClass="event-type-select">
+                                <f:selectItems value="#{selfServiceSettingsBBean.eventTypeSelectItems}" />
+                                
+                                <!-- FIXED: ajaxSingle=true, queue, specific reRender -->
+                                <a4j:support event="onchange"
+                                           action="#{selfServiceSettingsBBean.handleEventTypeChange}"
+                                           reRender="eventCodesDropdownWrapper,pickupTypeDropdownWrapper,searchResultsWrapper"
+                                           ajaxSingle="true"
+                                           limitToList="true"
+                                           eventsQueue="eventTypeQueue"
+                                           ignoreDupResponses="true"
+                                           oncomplete="onEventTypeChangeComplete();" />
+                            </h:selectOneMenu>
+                        </td>
+                    </tr>
+                </table>
+            </a4j:region>
+            
+            <rich:spacer height="40" />
+            
+            <!-- Search Filter Region -->
+            <a4j:region id="searchFilterRegion">
+                <div class="form-section">
+                    <div class="field-row">
+                        
+                        <!-- Stores Dropdown -->
+                        <div class="field-col">
+                            <span class="field-label">Stores:</span>
+                            <div class="rich-dropdown" data-dropdown-id="stores">
+                                <div class="rich-dropdown-label">
+                                    <span class="label-text" data-default="Select Stores">Select Stores</span>
+                                    <span class="dropdown-arrow"></span>
+                                </div>
+                                <div class="dropdown-list">
+                                    <div class="dropdown-actions">
+                                        <button type="button" onclick="selectAll(this, false)">Select All</button>
+                                        <button type="button" onclick="clearAll(this, false)">Clear All</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <rich:spacer height="10" />
+                    
+                    <!-- Event Codes Dropdown -->
+                    <h:panelGroup id="eventCodesDropdownWrapper">
+                        <div class="field-col">
+                            <span class="field-label">Event Codes:</span>
+                            <div class="rich-dropdown" data-dropdown-id="eventCodes">
+                                <div class="rich-dropdown-label">
+                                    <span class="dropdown-counter" id="eventCodesCounter">0/30</span>
+                                    <span class="label-text" data-default="Select Event Codes">Select Event Codes</span>
+                                    <span class="dropdown-arrow"></span>
+                                </div>
+                                <div class="dropdown-list">
+                                    <div class="dropdown-actions">
+                                        <button type="button" onclick="selectAll(this, true)">Select All</button>
+                                        <button type="button" onclick="clearAll(this, true)">Clear All</button>
+                                    </div>
+                                    <ui:repeat value="#{selfServiceSettingsBBean.searchEventCodesList}" var="code">
+                                        <label>
+                                            <h:selectBooleanCheckbox value="#{selfServiceSettingsBBean.selectedEventCodesMap[code]}" />
+                                            <h:outputText value="#{code}" title="#{selfServiceSettingsBBean.getDescriptionForCode(code.trim())}" />
+                                        </label>
+                                    </ui:repeat>
+                                </div>
+                            </div>
+                        </div>
+                    </h:panelGroup>
+                    
+                    <rich:spacer height="10" />
+                    
+                    <!-- Pickup Type Dropdown -->
+                    <h:panelGroup id="pickupTypeDropdownWrapper">
+                        <div class="field-col">
+                            <span class="field-label">Pickup Type:</span>
+                            <div class="rich-dropdown" data-dropdown-id="pickupType">
+                                <div class="rich-dropdown-label">
+                                    <span class="dropdown-counter" id="pickupTypeCounter">0/30</span>
+                                    <span class="label-text" data-default="Select Pickup Type">Select Pickup Type</span>
+                                    <span class="dropdown-arrow"></span>
+                                </div>
+                                <div class="dropdown-list">
+                                    <div class="dropdown-actions">
+                                        <button type="button" onclick="selectAll(this, false)">Select All</button>
+                                        <button type="button" onclick="clearAll(this, false)">Clear All</button>
+                                    </div>
+                                    <ui:repeat value="#{selfServiceSettingsBBean.searchPickupTypeList}" var="type">
+                                        <label>
+                                            <h:selectBooleanCheckbox value="#{selfServiceSettingsBBean.selectedPickupTypesMap[type]}" />
+                                            <h:outputText value="#{type}" />
+                                        </label>
+                                    </ui:repeat>
+                                </div>
+                            </div>
+                        </div>
+                    </h:panelGroup>
+                    
+                    <rich:spacer height="10" />
+                    
+                    <!-- Notification Messages -->
+                    <div class="field-col" style="position: relative;">
+                        <div class="field-label">Notification Messages:</div>
+                        
+                        <div class="notif-flex">
+                            
+                            <h:panelGroup id="chipInputWrapper"
+                                        layout="block"
+                                        styleClass="chip-input"
+                                        onclick="getChipEditor().focus();">
+                                
+                                <span id="chipCounter" class="chip-counter">0/4</span>
+                                
+                                <span id="chipsContainer" class="chips-container" data-visible-chips="4">
+                                    <ui:repeat value="#{selfServiceSettingsBBean.selectedNotificationList}" var="msg">
+                                        <span class="chip" data-label="#{msg}">
+                                            <span class="chip-text" title="#{msg}">#{msg}</span>
+                                            <button type="button" onclick="event.stopPropagation();removeChip(this.parentElement);">×</button>
+                                        </span>
+                                    </ui:repeat>
+                                </span>
+                                
+                                <h:inputText id="chipInput"
+                                           value="#{selfServiceSettingsBBean.chipQuery}"
+                                           styleClass="chip-editor-input"
+                                           autocomplete="off"
+                                           onfocus="openCustomNotifPopup()"
+                                           onkeydown="handleChipBackspace(event)"
+                                           onkeyup="var hid = document.querySelector('[id$=chipHidden]'); if(hid){ hid.value = this.value; }" />
+                            </h:panelGroup>
+                            
+                            <h:commandButton value="Search Smart Notifications"
+                                           action="#{selfServiceSettingsBBean.filterSmartNotifications}"
+                                           onclick="return prepareFormSubmit();"
+                                           styleClass="button_link_sm"
+                                           ajaxSingle="false"
+                                           style="padding:4px 8px; font-size:12px;height:40px;"
+                                           reRender="eventListTableWrapper"
+                                           oncomplete="onNotificationSearchComplete();" />
+                        </div>
+                        
+                        <h:inputHidden id="chipHidden" value="#{selfServiceSettingsBBean.chipQuery}" />
+                        <h:inputHidden id="selectedNotifications" value="#{selfServiceSettingsBBean.selectedNotificationsString}" />
+                        
+                        <!-- FIXED: Notification a4j:support -->
+                        <a4j:support event="onkeyup"
+                                   action="#{selfServiceSettingsBBean.fetchNotificationSuggestions}"
+                                   reRender="notifListWrapper"
+                                   oncomplete="onFetchNotifSuggestionsComplete(event, #{requestScope.notifJson});"
+                                   requestDelay="120"
+                                   ajaxSingle="true"
+                                   limitToList="true"
+                                   eventsQueue="notificationQueue"
+                                   ignoreDupResponses="true"
+                                   focus="chipInput" />
+                        
+                        <div id="notifPopup" class="notif-popup">
+                            <div class="dropdown-actions">
+                                <button type="button" onclick="selectAllNotifications(event)">Select All</button>
+                                <button type="button" onclick="clearAllNotifications(event)">Clear All</button>
+                            </div>
+                            
+                            <a4j:outputPanel id="notifListWrapper">
+                                <div id="notifList"></div>
+                            </a4j:outputPanel>
+                        </div>
+                    </div>
+                    
+                </div>
+                
+                <h:inputHidden id="selectedEventCodes" value="#{selfServiceSettingsBBean.selectedEventCodesString}" />
+                <h:inputHidden id="selectedPickupTypes" value="#{selfServiceSettingsBBean.selectedPickupTypesString}" />
+                <h:inputHidden id="selectedStores" value="#{selfServiceSettingsBBean.selectedStoresFilterString}" />
+            </a4j:region>
+            
+            <rich:spacer height="15" />
+            
+            <!-- Results Table -->
+            <h:panelGroup id="eventListTableWrapper" layout="block">
+                <h:panelGroup id="searchResultsWrapper">
+                    <h:panelGrid columns="3" width="900">
+                        <h:panelGrid columns="1" width="740">
+                            <rich:datascroller align="center" for="eventListTable" id="eventListScroller" renderIfSinglePage="false" />
+                        </h:panelGrid>
+                        <h:panelGrid columns="1" width="80">
+                            <rich:spacer />
+                        </h:panelGrid>
+                    </h:panelGrid>
+                    
+                    <rich:dataTable id="eventListTable"
+                                   cellpadding="0" cellspacing="0"
+                                   width="970" border="0" rows="10" 
+                                   rowClasses="tabletext_blk_on_wht,tabletext_blk_on_grey"
+                                   var="smartEventConfig" 
+                                   value="#{selfServiceSettingsBBean.smartNotificationEventMessages}">
+                        
+                        <rich:column width="0%" styleClass="col-tooltip-cursor">
+                            <f:facet name="header">
+                                <h:outputText value="Store" />
+                            </f:facet>
+                            <h:outputText value="#{smartEventConfig[0]}" />
+                        </rich:column>
+                        
+                        <rich:column width="0%" styleClass="col-tooltip-cursor">
+                            <f:facet name="header">
+                                <h:outputText value="Event Type" />
+                            </f:facet>
+                            <h:outputText value="#{smartEventConfig[1]}" />
+                        </rich:column>
+                        
+                        <rich:column width="0%" styleClass="col-tooltip-cursor">
+                            <f:facet name="header">
+                                <h:outputText value="Event Codes" />
+                            </f:facet>
+                            <h:outputText value="#{smartEventConfig[2]}" />
+                        </rich:column>
+                        
+                        <rich:column width="0%" styleClass="col-tooltip-cursor">
+                            <f:facet name="header">
+                                <h:outputText value="Pickup Types" />
+                            </f:facet>
+                            <h:outputText value="#{smartEventConfig[3]}" />
+                        </rich:column>
+                        
+                        <rich:column width="0%" styleClass="col-tooltip-cursor">
+                            <f:facet name="header">
+                                <h:outputText value="Notification Message" />
+                            </f:facet>
+                            <h:outputText value="#{smartEventConfig[4]}" />
+                        </rich:column>
+                        
+                        <rich:column width="0%" styleClass="col-tooltip-cursor">
+                            <f:facet name="header">
+                                <h:outputText value="Notification Enabled" />
+                            </f:facet>
+                            <h:outputText value="#{smartEventConfig[5]}" />
+                        </rich:column>
+                        
+                        <rich:column width="0%" styleClass="col-tooltip-cursor">
+                            <f:facet name="header">
+                                <h:outputText value="Disabled Reason" />
+                            </f:facet>
+                            <h:outputText value="#{smartEventConfig[6]}" />
+                        </rich:column>
+                        
+                        <rich:column width="0%" style="text-align:center;">
+                            <f:facet name="header">
+                                <h:outputText value="" />
+                            </f:facet>
+                            <h:commandLink id="enableLink" value="Enable" 
+                                         action="#{selfServiceSettingsBBean.enableGroup(smartEventConfig[7])}" />
+                            <h:commandLink id="disableLink" value="Disable" 
+                                         action="#{selfServiceSettingsBBean.openDisableReasonPanel(smartEventConfig[7])}" />
+                        </rich:column>
+                        
+                        <rich:column width="0%" style="text-align:center;">
+                            <f:facet name="header">
+                                <h:outputText value="" />
+                            </f:facet>
+                            <h:commandLink id="editEventLink" value="Edit" 
+                                         action="#{selfServiceSettingsBBean.editEvent(smartEventConfig[7])}" 
+                                         immediate="true" />
+                        </rich:column>
+                    </rich:dataTable>
+                </h:panelGroup>
+            </h:panelGroup>
+            
+            <rich:spacer height="20" />
+            
+            <!-- Action Buttons -->
+            <h:panelGroup id="bottom_panel">
+                <h:panelGrid columns="3" cellspacing="0">
+                    <a4j:commandButton id="addEvent" styleClass="button_link_sm" type="submit" value="Modify Event Configuration"
+                                     action="#{selfServiceSettingsBBean.modifyEventConfiguration()}" 
+                                     reRender="eventListTableWrapper" />
+                    <h:commandButton id="configureNewNotificationMessage" styleClass="button_link_sm" type="submit" value="Configure New Notification Message"
+                                   action="#{selfServiceSettingsBBean.configureNewNotificationMessage()}" />
+                    <h:commandButton styleClass="button_link_sm" value="Cancel" immediate="true" 
+                                   action="#{selfServiceSettingsBBean.cancel()}" />
+                </h:panelGrid>
+            </h:panelGroup>
+        </h:form>
+    </rich:panel>
+</h:body>
+</html>
