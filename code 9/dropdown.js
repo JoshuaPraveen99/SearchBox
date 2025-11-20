@@ -69,7 +69,7 @@ function getCheckboxLabel(checkbox) {
 }
 
 /* ===========================================================
-    UNIVERSAL LIMIT CONFIGURATION
+     UNIVERSAL LIMIT CONFIGURATION
 =========================================================== */
 
 var DROPDOWN_LIMITS = {
@@ -97,7 +97,7 @@ function getDropdownName(dropdownId) {
 }
 
 /* ===========================================================
-    USER NOTIFICATION SYSTEM (Toast Messages)
+     USER NOTIFICATION SYSTEM (Toast Messages)
 =========================================================== */
 
 function showUserMessage(message, type) {
@@ -158,13 +158,29 @@ function hideUserMessage() {
 }
 
 /* ===========================================================
+     NOTIFICATION CHIPS - CLIENT-SIDE ONLY
+=========================================================== */
+
+var notifLabels = [], notifNodesByLabel = {}, notifVisibleCount = 0;
+
+function hideAllCounters(){
+  var ids = ["storesCounter","eventCodesCounter","pickupTypeCounter","chipCounter"];
+  for (var i=0;i<ids.length;i++){
+    var el = byId(ids[i]);
+    if (el && el.className.indexOf("hidden") === -1) {
+      el.className += " hidden";
+    }
+  }
+}
+
+/* ===========================================================
     HIDDEN BUTTON TRIGGER FUNCTIONS
 =========================================================== */
 
-// ✅ NEW: Debounce timer for notification search
+// Debounce timer for notification search
 var notifSearchTimer = null;
 
-// ✅ NEW: Trigger notification search via hidden button
+// Trigger notification search via hidden button
 window.handleNotificationKeyup = function(event) {
   // Update hidden field
   var input = event.target;
@@ -192,7 +208,7 @@ window.handleNotificationKeyup = function(event) {
   }, 120);
 };
 
-// ✅ NEW: Trigger event type change via hidden button
+// Trigger event type change via hidden button
 window.triggerEventTypeChange = function() {
   console.log('[Dropdown] Triggering event type change via hidden button');
   
@@ -205,11 +221,6 @@ window.triggerEventTypeChange = function() {
   }
 };
 
-/* ===========================================================
-    NOTIFICATION CHIPS - CLIENT-SIDE ONLY
-=========================================================== */
-
-var notifLabels = [], notifNodesByLabel = {}, notifVisibleCount = 0;
 
 function hydrateNotifModelFromDOM(){
   console.log('[Dropdown] Hydrating model from DOM...');
@@ -386,512 +397,573 @@ function renderNotifSuggestions(results){
     list.appendChild(fragment);
   }
   
-  console.log('[Dropdown] Suggestions rendered successfully');
+  positionNotifPopup();
+  p.style.display="block";
 }
 
-function addChip(label){
-  console.log('[Dropdown] Adding chip: ' + label);
+// ✅ CLIENT-SIDE ONLY: Select All - No backend calls
+function selectAllNotifications(e){
+  console.log('[Dropdown] ========== SELECT ALL NOTIFICATIONS STARTED ==========');
+  
+  if (e){ 
+    e.preventDefault(); 
+    e.stopPropagation(); 
+  }
+  
+  var p = notifPopup(); 
+  if (!p) return;
+  
+  var boxes = p.querySelectorAll(".notif-row input[type='checkbox']");
+  var maxLimit = getDropdownLimit('notifications');
+  
   ensureNotifModelFresh();
   
-  var validLabel = validateLabel(label);
-  if (!validLabel) {
-    console.warn('[Dropdown] Invalid label, cannot add chip');
+  var labelsToAdd = [];
+  for (var i=0; i<boxes.length; i++){
+    if (!boxes[i].checked && boxes[i].dataset && boxes[i].dataset.label) {
+      var lbl = boxes[i].dataset.label;
+      var alreadyExists = false;
+      for (var x=0; x<notifLabels.length; x++){
+        if (notifLabels[x] === lbl) {
+          alreadyExists = true;
+          break;
+        }
+      }
+      if (!alreadyExists) {
+        labelsToAdd.push(lbl);
+      }
+    }
+  }
+  
+  var canAdd = maxLimit - notifLabels.length;
+  var wasLimited = false;
+  
+  if (labelsToAdd.length > canAdd) {
+    wasLimited = true;
+    labelsToAdd = labelsToAdd.slice(0, canAdd);
+  }
+  
+  if (!labelsToAdd.length) {
+    if (notifLabels.length >= maxLimit) {
+      showUserMessage(
+        'Already at maximum limit! You have ' + maxLimit + ' notifications selected.',
+        'info'
+      );
+    }
     return;
   }
   
-  var maxLimit = getDropdownLimit('notifications');
-  if (notifLabels.indexOf(validLabel) !== -1) {
-    console.log('[Dropdown] Chip already exists: ' + validLabel);
+  // ✅ Just add chips client-side, no backend calls
+  var successCount = 0;
+  for (var j=0; j<labelsToAdd.length; j++){
+    var before = notifLabels.length;
+    addChip(labelsToAdd[j]);
+    var after = notifLabels.length;
+    if (after > before) {
+      successCount++;
+    }
+  }
+  
+  // ✅ Update checkboxes to reflect selection
+  for (var m=0; m<boxes.length; m++){
+    if (boxes[m].dataset && boxes[m].dataset.label) {
+      var shouldBeChecked = false;
+      for (var y=0; y<notifLabels.length; y++){
+        if (notifLabels[y] === boxes[m].dataset.label) {
+          shouldBeChecked = true;
+          break;
+        }
+      }
+      boxes[m].checked = shouldBeChecked;
+    }
+  }
+  
+  if (wasLimited) {
+    var totalAvailable = boxes.length;
+    var notSelected = totalAvailable - notifLabels.length;
+    showUserMessage(
+      'Selected ' + successCount + ' notifications. Maximum limit is ' + maxLimit + '. ' +
+      notSelected + ' items could not be selected.',
+      'warning'
+    );
+  } else {
+    showUserMessage(
+      'Successfully selected ' + successCount + ' notifications.',
+      'success'
+    );
+  }
+  
+  positionNotifPopup();
+  console.log('[Dropdown] ========== SELECT ALL NOTIFICATIONS COMPLETED ==========');
+}
+
+// ✅ CLIENT-SIDE ONLY: Clear All - No backend calls
+function clearAllNotifications(e){
+  console.log('[Dropdown] ========== CLEAR ALL NOTIFICATIONS STARTED ==========');
+  
+  if (e){ 
+    e.preventDefault(); 
+    e.stopPropagation(); 
+  }
+  
+  var p = notifPopup(); 
+  if (!p) return;
+  
+  var boxes = p.querySelectorAll(".notif-row input[type='checkbox']");
+  
+  var labelsToRemove = [];
+  for (var i=0; i<boxes.length; i++){
+    if (boxes[i].checked && boxes[i].dataset && boxes[i].dataset.label) {
+      labelsToRemove.push(boxes[i].dataset.label);
+    }
+  }
+  
+  if (!labelsToRemove.length) {
+    showUserMessage('No notifications to clear.', 'info');
     return;
+  }
+  
+  // ✅ Just remove chips client-side, no backend calls
+  for (var j=0; j<labelsToRemove.length; j++){
+    removeChip(labelsToRemove[j]);
+  }
+  
+  // ✅ Update checkboxes
+  for (var m=0; m<boxes.length; m++){
+    boxes[m].checked = false;
+  }
+  
+  var ed = chipInput(); 
+  if (ed) ed.value = "";
+  
+  showUserMessage('Cleared ' + labelsToRemove.length + ' notifications.', 'success');
+  
+  positionNotifPopup();
+}
+
+function createNotifChipNode(lbl){
+  var validLabel = validateLabel(lbl);
+  if (!validLabel) return null;
+  
+  var c = document.createElement("span"); 
+  c.className="chip"; 
+  c.dataset.label=validLabel;
+  
+  var t = document.createElement("span"); 
+  t.className="chip-text"; 
+  t.title=validLabel; 
+  t.textContent=validLabel;
+  
+  var x = document.createElement("button"); 
+  x.type="button"; 
+  x.className="chip-remove"; 
+  x.textContent="×";
+  
+  (function(label){
+    x.addEventListener("click", function(e){ 
+      if (e) {
+        e.stopPropagation(); 
+        e.preventDefault(); 
+      }
+      removeChip(label); 
+    });
+  })(validLabel);
+  
+  c.appendChild(t); 
+  c.appendChild(x);
+  return c;
+}
+
+// ✅ CLIENT-SIDE ONLY: addChip - No backend call
+function addChip(lbl){
+  var validLabel = validateLabel(lbl);
+  if (!validLabel) return;
+  
+  var maxLimit = getDropdownLimit('notifications');
+  
+  ensureNotifModelFresh();
+  
+  if (notifNodesByLabel[validLabel]) return;
+  
+  for (var i=0; i<notifLabels.length; i++){
+    if (notifLabels[i] === validLabel) return;
   }
   
   if (notifLabels.length >= maxLimit) {
+    console.warn('[Dropdown] Cannot add chip: max limit reached (' + maxLimit + ')');
     showUserMessage(
       'Maximum limit reached! You can select up to ' + maxLimit + ' notifications only.',
       'warning'
     );
-    console.warn('[Dropdown] Cannot add chip - limit reached');
     return;
   }
 
-  notifLabels.push(validLabel);
-
-  var c = chipContainer();
+  var c = createNotifChipNode(validLabel);
   if (!c) return;
+  
+  notifLabels.push(validLabel);
+  notifNodesByLabel[validLabel] = c;
+  
+  var container = chipContainer();
+  if (container) {
+    container.appendChild(c);
+  }
 
-  var chip = document.createElement("span");
-  chip.className = "chip";
-  chip.dataset.label = validLabel;
-
-  var txt = document.createElement("span");
-  txt.className = "chip-text";
-  txt.textContent = validLabel;
-  txt.title = validLabel;
-
-  var btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "chip-remove";
-  btn.textContent = "×";
-  btn.onclick = function(e){ 
-    e.stopPropagation(); 
-    e.preventDefault(); 
-    removeChip(validLabel); 
-  };
-
-  chip.appendChild(txt); 
-  chip.appendChild(btn);
-  c.appendChild(chip);
-
-  notifNodesByLabel[validLabel] = chip;
-
-  renderNotifChips();
-  console.log('[Dropdown] Chip added successfully: ' + validLabel);
+  // ✅ NO BACKEND CALL - just update UI
+  renderNotifChips(true);
+  positionNotifPopup();
 }
 
-function removeChip(label){
-  console.log('[Dropdown] Removing chip: ' + label);
-  ensureNotifModelFresh();
+// ✅ CLIENT-SIDE ONLY: removeChip - No backend call
+function removeChip(lbl){
+  var validLabel = validateLabel(lbl);
+  if (!validLabel) return;
   
-  var validLabel = validateLabel(label);
-  if (!validLabel) {
-    console.warn('[Dropdown] Invalid label, cannot remove chip');
-    return;
+  ensureNotifModelFresh();
+
+  var n = notifNodesByLabel[validLabel];
+  if (!n){
+    var container = chipContainer();
+    if (container) {
+      n = container.querySelector('.chip[data-label="'+CSS.escape(validLabel)+'"]');
+    }
+  }
+  
+  if (n && n.parentNode) {
+    n.parentNode.removeChild(n);
   }
 
-  var idx = notifLabels.indexOf(validLabel);
-  if (idx === -1) {
-    console.warn('[Dropdown] Chip not found in array: ' + validLabel);
-    return;
-  }
-
-  notifLabels.splice(idx, 1);
-
-  var node = notifNodesByLabel[validLabel];
-  if (node && node.parentNode) {
-    node.parentNode.removeChild(node);
-  }
   delete notifNodesByLabel[validLabel];
+  
+  for (var i=0; i<notifLabels.length; i++){
+    if (notifLabels[i] === validLabel) {
+      notifLabels.splice(i, 1);
+      break;
+    }
+  }
 
-  // Update checkboxes in popup
+  // ✅ NO BACKEND CALL - just update UI
   var p = notifPopup();
-  if (p) {
-    var cbs = p.querySelectorAll("input[type='checkbox']");
-    for (var i=0;i<cbs.length;i++){
-      var cb = cbs[i];
-      if (cb.dataset && cb.dataset.label === validLabel) {
-        cb.checked = false;
+  if (p){
+    var boxes = p.querySelectorAll('.notif-row input[type="checkbox"]');
+    for (var j=0;j<boxes.length;j++){
+      if (boxes[j].dataset.label===validLabel) {
+        boxes[j].checked=false;
+      }
+    }
+  }
+  
+  renderNotifChips(true);
+  positionNotifPopup();
+}
+
+function renderNotifChips(reset){
+  var c = chipContainer();
+  if (!c) return;
+  
+  var total = notifLabels.length, chunk = 5;
+  
+  ensureNotifModelFresh();
+
+  if (reset) notifVisibleCount = chunk;
+  if (!notifVisibleCount) notifVisibleCount = chunk;
+  var visible = Math.min(notifVisibleCount, total);
+
+  var old = c.querySelectorAll(".chip-more");
+  for (var i=0;i<old.length;i++){
+    if (old[i].parentNode) old[i].parentNode.removeChild(old[i]);
+  }
+
+  for (var j=0;j<total;j++){
+    var lbl = notifLabels[j];
+    var n = notifNodesByLabel[lbl];
+    
+    if (!n) {
+      n = createNotifChipNode(lbl);
+      if (n) {
+        notifNodesByLabel[lbl] = n;
+      }
+    }
+    
+    if (n) {
+      c.appendChild(n);
+      if (j < visible) {
+        n.classList.remove("hidden");
+      } else {
+        n.classList.add("hidden");
       }
     }
   }
 
-  renderNotifChips();
-  console.log('[Dropdown] Chip removed successfully: ' + validLabel);
-}
+  var hidden = total - visible;
 
-function renderNotifChips(skipPositionUpdate){
-  console.log('[Dropdown] Rendering notification chips UI...');
-  var c = chipContainer(); 
-  if (!c) return;
-
-  var visibleLimit = parseInt(c.dataset.visibleChips) || 4;
-  var chips = c.querySelectorAll(".chip[data-label]");
-  var counter = byId("chipCounter");
-
-  notifVisibleCount = chips.length;
-
-  // Show or hide chips based on limit
-  for (var i=0;i<chips.length;i++){
-    chips[i].style.display = (i < visibleLimit) ? "inline-flex" : "none";
-  }
-
-  // Update "+N more" chip
-  var moreChip = c.querySelector(".dropdown-chip-more");
-  if (chips.length > visibleLimit){
-    var hiddenCount = chips.length - visibleLimit;
-    if (!moreChip){
-      moreChip = document.createElement("span");
-      moreChip.className = "dropdown-chip dropdown-chip-more";
-      moreChip.style.cssText = "background:#f3f4f6; cursor:pointer;";
-      moreChip.textContent = "+" + hiddenCount + " more";
-      moreChip.onclick = function(e){ 
-        e.stopPropagation(); 
-        showAllChipsModal(); 
-      };
-      c.appendChild(moreChip);
-    } else {
-      moreChip.textContent = "+" + hiddenCount + " more";
-    }
-  } else if (moreChip) {
-    moreChip.remove();
-  }
-
-  // Reposition popup if it's open
-  if (!skipPositionUpdate) {
-    var p = notifPopup();
-    if (p && p.style.display === "block") {
+  if (hidden > 0){
+    var more = document.createElement("span");
+    more.className="chip chip-more"; 
+    more.textContent="+"+hidden+" more"; 
+    more.style.cursor="pointer";
+    
+    more.addEventListener("click", function(){
+      notifVisibleCount = Math.min(notifVisibleCount+chunk, total);
+      renderNotifChips(); 
       positionNotifPopup();
+    });
+    
+    c.appendChild(more);
+
+    if (notifVisibleCount > chunk){
+      var col = document.createElement("span");
+      col.className="chip chip-more"; 
+      col.textContent="Collapse"; 
+      col.style.cursor="pointer";
+      
+      col.addEventListener("click", function(){
+        notifVisibleCount = chunk;
+        renderNotifChips(true); 
+        positionNotifPopup();
+      });
+      
+      c.appendChild(col);
     }
+
+  } else if (total > chunk){
+    var col2 = document.createElement("span");
+    col2.className="chip chip-more"; 
+    col2.textContent="Collapse"; 
+    col2.style.cursor="pointer";
+    
+    col2.addEventListener("click", function(){
+      notifVisibleCount = chunk;
+      renderNotifChips(true); 
+      positionNotifPopup();
+    });
+    
+    c.appendChild(col2);
   }
-  
-  console.log('[Dropdown] Notification chips rendered: ' + chips.length + ' total');
-}
-
-function showAllChipsModal(){
-  ensureNotifModelFresh();
-  
-  var existing = byId("allChipsModal");
-  if (existing) existing.remove();
-
-  var overlay = document.createElement("div");
-  overlay.id = "allChipsModal";
-  overlay.style.cssText = 
-    "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5);" +
-    "z-index:999999; display:flex; justify-content:center; align-items:center;";
-
-  var modal = document.createElement("div");
-  modal.style.cssText = 
-    "background:#fff; border-radius:12px; padding:24px; max-width:600px; width:90%;" +
-    "max-height:80vh; overflow-y:auto; box-shadow:0 8px 24px rgba(0,0,0,0.3);";
-
-  var title = document.createElement("h3");
-  title.textContent = "All Selected Notifications (" + notifLabels.length + ")";
-  title.style.cssText = "margin:0 0 16px 0; font-size:18px; color:#111827;";
-
-  var chipsList = document.createElement("div");
-  chipsList.style.cssText = "display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;";
-
-  for (var i=0;i<notifLabels.length;i++){
-    var lbl = notifLabels[i];
-    var chip = document.createElement("span");
-    chip.className = "chip";
-    chip.style.display = "inline-flex";
-
-    var txt = document.createElement("span");
-    txt.className = "chip-text";
-    txt.textContent = lbl;
-    txt.title = lbl;
-
-    var btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "chip-remove";
-    btn.textContent = "×";
-    (function(label){
-      btn.onclick = function(e){ 
-        e.stopPropagation(); 
-        removeChip(label); 
-        overlay.remove(); 
-        showAllChipsModal(); 
-      };
-    })(lbl);
-
-    chip.appendChild(txt); 
-    chip.appendChild(btn);
-    chipsList.appendChild(chip);
-  }
-
-  var closeBtn = document.createElement("button");
-  closeBtn.textContent = "Close";
-  closeBtn.style.cssText = 
-    "width:100%; padding:8px; background:#3b82f6; color:#fff; border:none;" +
-    "border-radius:6px; cursor:pointer; font-size:14px;";
-  closeBtn.onclick = function(){ overlay.remove(); };
-
-  modal.appendChild(title);
-  modal.appendChild(chipsList);
-  modal.appendChild(closeBtn);
-  overlay.appendChild(modal);
-  document.body.appendChild(overlay);
-
-  overlay.onclick = function(e){ 
-    if (e.target === overlay) overlay.remove(); 
-  };
 }
 
 function attachDelegatedChipRemove(){
   var c = chipContainer(); 
   if (!c || c._delegated) return;
   c._delegated = true;
+  
   c.addEventListener("click", function(e){
-    if (e.target.classList.contains("chip-remove")){
-      var ch = e.target.closest(".chip");
-      if (ch && ch.dataset && ch.dataset.label){
-        var lbl = ch.dataset.label;
-        removeChip(lbl);
+    var t = e.target;
+    while (t && t !== c){
+      if (t.classList && t.classList.contains("chip-remove")){
+        var chip = t;
+        while (chip && (!chip.classList || !chip.classList.contains("chip"))){
+          chip = chip.parentNode;
+        }
+        if (chip){
+          var lbl = chip.dataset ? chip.dataset.label : chip.getAttribute("data-label");
+          if (lbl) removeChip(lbl);
+        }
+        return;
       }
+      t = t.parentNode;
     }
   });
 }
 
-function selectAllNotifications(e){
-  if (e) e.preventDefault();
-  console.log('[Dropdown] Select All Notifications');
-  
-  ensureNotifModelFresh();
-  var p = notifPopup(), list = byId("notifList");
-  if (!p || !list) return;
-  
-  var cbs = list.querySelectorAll("input[type='checkbox']");
-  var maxLimit = getDropdownLimit('notifications');
-  var added = 0;
-  var wasLimited = false;
-  
-  for (var i=0;i<cbs.length;i++){
-    if (!cbs[i].checked && notifLabels.length < maxLimit) {
-      var lbl = cbs[i].dataset ? cbs[i].dataset.label : null;
-      if (lbl) {
-        cbs[i].checked = true;
-        addChip(lbl);
-        added++;
-      }
-    } else if (!cbs[i].checked) {
-      wasLimited = true;
+setTimeout(function(){
+  var i = chipInput();
+  if (i && i.parentNode && typeof ResizeObserver==="function"){
+    try { 
+      new ResizeObserver(function(){ 
+        var p = notifPopup();
+        if (p && p.style.display === "block") {
+          positionNotifPopup(); 
+        }
+      }).observe(i.parentNode); 
+    } catch(e){
+      console.error('[Dropdown] ResizeObserver error:', e);
     }
   }
-  
-  if (wasLimited) {
-    var totalAvailable = cbs.length;
-    var notSelected = totalAvailable - notifLabels.length;
-    showUserMessage(
-      'Selected ' + added + ' notifications. Maximum limit is ' + maxLimit + '. ' +
-      notSelected + ' items could not be selected.',
-      'warning'
-    );
-  } else if (added > 0) {
-    showUserMessage('Successfully selected ' + added + ' notifications.', 'success');
-  } else {
-    showUserMessage('Already at maximum limit or all items selected!', 'info');
-  }
-}
-
-function clearAllNotifications(e){
-  if (e) e.preventDefault();
-  console.log('[Dropdown] Clear All Notifications');
-  
-  ensureNotifModelFresh();
-  var cleared = notifLabels.length;
-  
-  // Clear all chips
-  while (notifLabels.length > 0) {
-    removeChip(notifLabels[0]);
-  }
-  
-  if (cleared > 0) {
-    showUserMessage('Cleared ' + cleared + ' notifications.', 'success');
-  } else {
-    showUserMessage('No notifications to clear.', 'info');
-  }
-}
+},300);
 
 /* ===========================================================
-   CUSTOM DROPDOWN CHIPS FUNCTIONS
+    MULTI-SELECT DROPDOWNS WITH LIMITS
 =========================================================== */
 
-function updateDropdownChips(dd, boxes, labelText){
-  if (!dd || !boxes || !labelText) return;
-
-  var ddId = dd.getAttribute("data-dropdown-id");
-  if (!ddId) return;
-
-  var maxLimit = getDropdownLimit(ddId);
-  var dropdownName = getDropdownName(ddId);
-  var checked = [];
+function removeDropdownChip(btn,ev){
+  if (!btn || !ev) return;
+  ev.stopPropagation();
+  
+  var chip = btn.closest(".dropdown-chip");
+  if (!chip) return;
+  
+  var lbl = chip.dataset ? chip.dataset.value : chip.getAttribute("data-value");
+  if (!lbl) return;
+  
+  var dd = chip.closest(".rich-dropdown");
+  if (!dd) return;
+  
+  var boxes = dd.querySelectorAll(".dropdown-list input[type='checkbox']");
+  var labelText = dd.querySelector(".label-text");
   
   for (var i=0;i<boxes.length;i++){
-    if (boxes[i].checked) {
-      var t = getCheckboxLabel(boxes[i]);
-      if (t) checked.push(t);
+    if (getCheckboxLabel(boxes[i]) === lbl){
+      boxes[i].checked=false;
+      boxes[i].dispatchEvent(new Event("change",{bubbles:true}));
     }
-  }
-
-  // Clear existing chips and ALL text nodes
-  var existingChips = labelText.querySelectorAll(".dropdown-chip, .dropdown-chip-more, .placeholder-text");
-  for (var j=0;j<existingChips.length;j++){
-    existingChips[j].remove();
   }
   
-  // Also clear any direct text nodes (from XHTML)
-  var childNodes = labelText.childNodes;
-  for (var n=childNodes.length-1; n>=0; n--){
-    if (childNodes[n].nodeType === 3) { // Text node
-      labelText.removeChild(childNodes[n]);
-    }
-  }
-
-  // Add new chips
-  var visibleLimit = 3;
-  for (var k=0;k<Math.min(checked.length, visibleLimit);k++){
-    var chip = document.createElement("span");
-    chip.className = "dropdown-chip";
-    
-    var chipText = document.createElement("span");
-    chipText.className = "dropdown-chip-text";
-    chipText.textContent = checked[k];
-    chipText.title = checked[k];
-    
-    var removeBtn = document.createElement("button");
-    removeBtn.className = "dropdown-chip-remove";
-    removeBtn.textContent = "×";
-    removeBtn.type = "button";
-    
-    (function(label, dropdown, checkboxes){
-      removeBtn.onclick = function(e){
-        e.stopPropagation();
-        e.preventDefault();
-        
-        for (var x=0;x<checkboxes.length;x++){
-          var cbLabel = getCheckboxLabel(checkboxes[x]);
-          if (cbLabel === label && checkboxes[x].checked) {
-            checkboxes[x].checked = false;
-            checkboxes[x].dispatchEvent(new Event("change",{bubbles:true}));
-            break;
-          }
-        }
-      };
-    })(checked[k], dd, boxes);
-    
-    chip.appendChild(chipText);
-    chip.appendChild(removeBtn);
-    labelText.insertBefore(chip, labelText.firstChild);
-  }
-
-  // Add "+N more" chip if needed
-  if (checked.length > visibleLimit){
-    var moreChip = document.createElement("span");
-    moreChip.className = "dropdown-chip dropdown-chip-more";
-    moreChip.textContent = "+" + (checked.length - visibleLimit) + " more";
-    moreChip.style.background = "#f3f4f6";
-    moreChip.style.cursor = "pointer";
-    
-    (function(dropdown, allChecked){
-      moreChip.onclick = function(e){
-        e.stopPropagation();
-        showDropdownModal(dropdown, allChecked);
-      };
-    })(dd, checked);
-    
-    labelText.insertBefore(moreChip, labelText.firstChild);
-  }
-
-  // Update placeholder text
-  var defaultText = labelText.dataset.default || "Select items";
-  if (checked.length === 0) {
-    var placeholder = labelText.querySelector(".placeholder-text");
-    if (!placeholder) {
-      placeholder = document.createElement("span");
-      placeholder.className = "placeholder-text";
-      placeholder.style.color = "#9ca3af";
-      labelText.appendChild(placeholder);
-    }
-    placeholder.textContent = defaultText;
-  } else {
-    var placeholder = labelText.querySelector(".placeholder-text");
-    if (placeholder) placeholder.remove();
-  }
+  updateDropdownChips(dd,boxes,labelText);
 }
 
-function showDropdownModal(dd, selectedItems){
+function expandDropdownChips(btn,ev){
+  if (!btn || !ev) return;
+  ev.stopPropagation();
+  
+  var dd=btn.closest(".rich-dropdown");
+  if (!dd) return;
+  
+  var lt=dd.querySelector(".label-text");
+  if (!lt) return;
+  
+  var boxes=dd.querySelectorAll(".dropdown-list input[type='checkbox']");
+  var selected=[];
+  
+  for (var i=0;i<boxes.length;i++){
+    if (boxes[i].checked){
+      var t=getCheckboxLabel(boxes[i]); 
+      if (t) selected.push(t);
+    }
+  }
+  
+  var chunk=5, curr=parseInt(lt.dataset.visibleCount||chunk,10);
+  curr=Math.min(curr+chunk, selected.length); 
+  lt.dataset.visibleCount=curr;
+  renderDropdownChips(lt, selected, curr, chunk);
+}
+
+function collapseDropdownChips(btn,ev){
+  if (!btn || !ev) return;
+  ev.stopPropagation();
+  
+  var dd=btn.closest(".rich-dropdown");
+  if (!dd) return;
+  
+  var lt=dd.querySelector(".label-text");
+  if (!lt) return;
+  
+  lt.dataset.visibleCount=5;
+  var boxes=dd.querySelectorAll(".dropdown-list input[type='checkbox']");
+  updateDropdownChips(dd,boxes,lt);
+}
+
+function renderDropdownChips(lt, selected, visible, chunk){
+  if (!lt || !selected) return;
+  
+  while (lt.firstChild) {
+    lt.removeChild(lt.firstChild);
+  }
+  
+  var max=Math.min(visible,selected.length);
+  var fragment = document.createDocumentFragment();
+  
+  for (var i=0;i<max;i++){
+    var lbl=selected[i];
+    var validLabel = validateLabel(lbl);
+    if (!validLabel) continue;
+    
+    var chipSpan = document.createElement("span");
+    chipSpan.className = "dropdown-chip";
+    chipSpan.dataset.value = validLabel;
+    chipSpan.title = validLabel;
+    
+    var textSpan = document.createElement("span");
+    textSpan.className = "dropdown-chip-text";
+    textSpan.textContent = validLabel;
+    
+    var removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "dropdown-chip-remove";
+    removeBtn.textContent = "×";
+    
+    removeBtn.addEventListener("click", function(e){
+      removeDropdownChip(this, e);
+    });
+    
+    chipSpan.appendChild(textSpan);
+    chipSpan.appendChild(removeBtn);
+    fragment.appendChild(chipSpan);
+  }
+  
+  var rem = selected.length - visible;
+  
+  if (rem>0) {
+    var moreSpan = document.createElement("span");
+    moreSpan.className = "dropdown-chip dropdown-chip-more";
+    moreSpan.textContent = "+"+rem+" more";
+    moreSpan.style.cursor = "pointer";
+    
+    moreSpan.addEventListener("click", function(e){
+      expandDropdownChips(this, e);
+    });
+    
+    fragment.appendChild(moreSpan);
+  }
+  
+  if (visible>chunk) {
+    var collapseSpan = document.createElement("span");
+    collapseSpan.className = "dropdown-chip dropdown-chip-more";
+    collapseSpan.textContent = "Collapse";
+    collapseSpan.style.cursor = "pointer";
+    
+    collapseSpan.addEventListener("click", function(e){
+      collapseDropdownChips(this, e);
+    });
+    
+    fragment.appendChild(collapseSpan);
+  }
+  
+  lt.appendChild(fragment);
+}
+
+function updateDropdownChips(dd,boxes,lt){
+  if (!dd || !boxes || !lt) return;
+  
+  var selected=[], i;
+  for (i=0;i<boxes.length;i++){
+    if (boxes[i].checked){
+      var t = getCheckboxLabel(boxes[i]); 
+      if (t) selected.push(t);
+    }
+  }
+
   var ddId = dd.getAttribute("data-dropdown-id");
-  var dropdownName = getDropdownName(ddId);
-  
-  var existing = byId("dropdownModal");
-  if (existing) existing.remove();
-
-  var overlay = document.createElement("div");
-  overlay.id = "dropdownModal";
-  overlay.style.cssText = 
-    "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5);" +
-    "z-index:999999; display:flex; justify-content:center; align-items:center;";
-
-  var modal = document.createElement("div");
-  modal.style.cssText = 
-    "background:#fff; border-radius:12px; padding:24px; max-width:600px; width:90%;" +
-    "max-height:80vh; overflow-y:auto; box-shadow:0 8px 24px rgba(0,0,0,0.3);";
-
-  var title = document.createElement("h3");
-  title.textContent = "All Selected " + dropdownName + " (" + selectedItems.length + ")";
-  title.style.cssText = "margin:0 0 16px 0; font-size:18px; color:#111827;";
-
-  var chipsList = document.createElement("div");
-  chipsList.style.cssText = "display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;";
-
-  var boxes = dd.querySelectorAll(".dropdown-list input[type='checkbox']");
-  var lt = dd.querySelector(".label-text");
-
-  for (var i=0;i<selectedItems.length;i++){
-    var item = selectedItems[i];
-    var chip = document.createElement("span");
-    chip.className = "dropdown-chip";
-    chip.style.display = "inline-flex";
-
-    var chipText = document.createElement("span");
-    chipText.className = "dropdown-chip-text";
-    chipText.textContent = item;
-    chipText.title = item;
-
-    var removeBtn = document.createElement("button");
-    removeBtn.className = "dropdown-chip-remove";
-    removeBtn.textContent = "×";
-    removeBtn.type = "button";
+  if (ddId) {
+    var counter = byId(ddId + "Counter");
+    if (counter) {
+      counter.textContent = selected.length + "/" + boxes.length;
+    }
+  }
     
-    (function(label, dropdown, checkboxes, labelText){
-      removeBtn.onclick = function(e){
-        e.stopPropagation();
-        
-        for (var x=0;x<checkboxes.length;x++){
-          var cbLabel = getCheckboxLabel(checkboxes[x]);
-          if (cbLabel === label && checkboxes[x].checked) {
-            checkboxes[x].checked = false;
-            checkboxes[x].dispatchEvent(new Event("change",{bubbles:true}));
-            updateDropdownChips(dropdown, checkboxes, labelText);
-            overlay.remove();
-            
-            // Reopen modal with updated list
-            var newChecked = [];
-            for (var y=0;y<checkboxes.length;y++){
-              if (checkboxes[y].checked) {
-                var t = getCheckboxLabel(checkboxes[y]);
-                if (t) newChecked.push(t);
-              }
-            }
-            if (newChecked.length > 0) {
-              showDropdownModal(dropdown, newChecked);
-            }
-            break;
-          }
-        }
-      };
-    })(item, dd, boxes, lt);
+    // Update stores display in table if this is the stores dropdown
+    if (ddId === "stores") {
+      updateStoresDisplay(selected);
+    }
 
-    chip.appendChild(chipText);
-    chip.appendChild(removeBtn);
-    chipsList.appendChild(chip);
+  if (!selected.length){
+    lt.textContent = lt.getAttribute("data-default") || "Select";
+    lt.dataset.visibleCount = 5; 
+    return;
   }
 
-  var closeBtn = document.createElement("button");
-  closeBtn.textContent = "Close";
-  closeBtn.style.cssText = 
-    "width:100%; padding:8px; background:#3b82f6; color:#fff; border:none;" +
-    "border-radius:6px; cursor:pointer; font-size:14px;";
-  closeBtn.onclick = function(){ overlay.remove(); };
-
-  modal.appendChild(title);
-  modal.appendChild(chipsList);
-  modal.appendChild(closeBtn);
-  overlay.appendChild(modal);
-  document.body.appendChild(overlay);
-
-  overlay.onclick = function(e){ 
-    if (e.target === overlay) overlay.remove(); 
-  };
+  var chunk=5, vis=parseInt(lt.dataset.visibleCount||chunk,10);
+  vis=Math.min(vis, selected.length);
+  renderDropdownChips(lt, selected, vis, chunk);
 }
 
-function selectAll(btn, flag){
+function selectAll(btn,flag){
+  if (!btn) return;
+  
   var dd = btn.closest(".rich-dropdown");
   if (!dd) return;
   
   var ddId = dd.getAttribute("data-dropdown-id");
-  if (!ddId) return;
-  
   var maxLimit = getDropdownLimit(ddId);
   var dropdownName = getDropdownName(ddId);
   
@@ -1104,6 +1176,7 @@ window.addEventListener("load", function(){
     console.log('[Dropdown] Limits: Notifications=' + DROPDOWN_LIMITS.notifications + 
                 ', EventCodes=' + DROPDOWN_LIMITS.eventCodes + 
                 ', PickupType=' + DROPDOWN_LIMITS.pickupType);
+    hideAllCounters();
     initializeCustomDropdowns();
     hydrateNotifModelFromDOM();
     attachDelegatedChipRemove();
